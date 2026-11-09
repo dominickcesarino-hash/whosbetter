@@ -68,7 +68,7 @@ async function grounded(key, prompt) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 400));
-      last = { status: r.status, quota: r.status === 429 };
+      last = { status: r.status, quota: r.status === 429, msg: str(data.error && data.error.message, 200), model: m };
       continue;
     }
     const cand = (data.candidates || [])[0] || {};
@@ -163,7 +163,9 @@ async function handle(req, env, ctx) {
   } catch (e) {
     if (e && e.quota) return json(429, { error: "Who's Better has used up its free lookups for now. Please try again later." });
     console.error(e);
-    return json(502, { error: "Couldn't reach the stats service. Please try again." });
+    const detail = e && e.msg ? `Gemini ${e.status} (${e.model}): ${e.msg}` : String(e && e.message || e).slice(0, 200);
+    if (e && /api key/i.test(e.msg || "")) return json(500, { error: "The Gemini API key isn't valid. Check GEMINI_API_KEY in Cloudflare.", detail });
+    return json(502, { error: "Couldn't reach the stats service. Please try again.", detail });
   }
 }
 
