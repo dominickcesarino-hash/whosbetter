@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Dashboard — Who's Better?</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#07060d">
+<link rel="stylesheet" href="/common.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  main{max-width:1180px}
+  h1{font-size:clamp(26px,4.5vw,36px); letter-spacing:-.03em; margin:0 0 4px}
+  .sub{color:var(--muted); margin:0 0 20px; font-size:14px}
+  .gate{max-width:440px; margin:60px auto; text-align:center; padding:28px; background:rgba(20,16,34,.6); border:1px solid var(--line); border-radius:20px}
+  .gate p{color:var(--muted); line-height:1.5}
+  .grid{display:grid; gap:14px}
+  .tiles{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .two{grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))}
+  .three{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+  .card{background:rgba(20,16,34,.6); border:1px solid var(--line); border-radius:18px; padding:16px 18px; min-width:0}
+  .card h3{margin:0 0 12px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .tile .v{font-size:34px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+  .tile .l{color:var(--muted); font-size:13px; margin-top:2px}
+  .tile .d{color:var(--dim); font-size:12px; margin-top:8px}
+  section{margin-top:14px}
+  /* column chart */
+  .cols{position:relative; display:flex; align-items:flex-end; gap:2px; height:150px; border-bottom:1px solid var(--line); padding-top:8px}
+  .col{flex:1; height:100%; display:flex; align-items:flex-end; position:relative; cursor:default}
+  .col i{display:block; width:100%; background:var(--a); border-radius:4px 4px 0 0; min-height:0}
+  .col.z i{background:transparent}
+  .col:hover i{filter:brightness(1.25)}
+  .axis{display:flex; justify-content:space-between; color:var(--dim); font-size:11px; margin-top:6px}
+  .tip{position:fixed; z-index:60; pointer-events:none; background:#1d1930; border:1px solid var(--line); border-radius:10px; padding:7px 10px; font-size:12.5px; color:var(--text); box-shadow:0 10px 30px rgba(0,0,0,.4); white-space:nowrap}
+  .tip b{font-variant-numeric:tabular-nums}
+  .ymax{position:absolute; top:-6px; left:0; color:var(--dim); font-size:11px}
+  /* ranked bars */
+  .rank{display:grid; gap:7px}
+  .rrow{display:grid; grid-template-columns:minmax(0,1fr) 44px; gap:10px; align-items:center; font-size:13.5px}
+  .rrow .nm{min-width:0}
+  .rrow .nm span{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:4px}
+  .rrow .tr{height:6px; border-radius:6px; background:var(--glass)}
+  .rrow .tr i{display:block; height:100%; border-radius:6px; background:var(--a)}
+  .rrow .n{text-align:right; font-variant-numeric:tabular-nums; color:var(--muted); font-weight:600}
+  .none{color:var(--dim); font-size:13.5px; padding:6px 0}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); white-space:nowrap}
+  th{color:var(--dim); font-size:11px; letter-spacing:.08em; text-transform:uppercase}
+  td.q{white-space:normal; min-width:180px}
+  .tw{overflow:auto}
+  .pill{font-size:11px; padding:2px 8px; border-radius:999px; background:var(--glass2); color:var(--muted)}
+  .pill.y{background:rgba(126,240,200,.12); color:var(--ok)}
+  .top{display:flex; align-items:end; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:16px}
+  .btn{background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:8px 14px; font-size:13px; cursor:pointer}
+</style>
+</head>
+<body data-page="admin">
+<div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<main>
+  <div id="gate" class="gate"><div class="spin"></div><p>Checking access…</p></div>
+  <div id="dash" hidden>
+    <div class="top">
+      <div><h1>Admin dashboard</h1><p class="sub" id="upd"></p></div>
+      <button class="btn" id="refresh" type="button">↻ Refresh</button>
+    </div>
+    <div class="grid tiles" id="tiles"></div>
+    <section class="grid two">
+      <div class="card"><h3>Comparisons per day (last 30 days)</h3><div id="chartCmp"></div></div>
+      <div class="card"><h3>New accounts per day (last 30 days)</h3><div id="chartUsr"></div></div>
+    </section>
+    <section class="grid three">
+      <div class="card"><h3>Most looked-up sports</h3><div id="sports"></div></div>
+      <div class="card"><h3>Most looked-up athletes</h3><div id="athletes"></div></div>
+      <div class="card"><h3>Most looked-up teams</h3><div id="teams"></div></div>
+    </section>
+    <section class="grid two">
+      <div class="card"><h3>Most viewed leagues (stats page)</h3><div id="leagues"></div></div>
+      <div class="card"><h3>Page views</h3><div id="views"></div></div>
+    </section>
+    <section class="card"><h3>Latest comparisons</h3><div class="tw" id="recent"></div></section>
+  </div>
+</main>
+<div class="tip" id="tip" hidden></div>
+
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id), esc = WB.esc;
+const fmt = n => (n || 0).toLocaleString();
+
+function gate(html) { $("dash").hidden = true; $("gate").hidden = false; $("gate").innerHTML = html; }
+
+async function load() {
+  const d = await WB.api("/api/admin");
+  if (d.error) {
+    gate(`<h2>Admins only</h2><p>${esc(d.error === "Admins only." ? "This account doesn't have access to the admin dashboard." : d.error)}</p>`);
+    return;
+  }
+  $("gate").hidden = true; $("dash").hidden = false;
+  $("upd").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const t = d.totals || {}, u = d.users || {};
+  const views = Object.fromEntries((d.views || []).map(v => [v.type.replace("view:", ""), v]));
+  const tiles = [
+    [fmt(t.all_time), "Comparisons (messages sent)", `${fmt(t.today)} today · ${fmt(t.week)} this week`],
+    [fmt(u.total), "Accounts made", `${fmt(u.today)} today · ${fmt(u.week)} this week`],
+    [fmt(u.active_week), "Active accounts", "signed in during the last 7 days"],
+    [fmt((views.home && views.home.n || 0) + (views.stats && views.stats.n || 0)), "Page views", `${fmt((views.home && views.home.week || 0) + (views.stats && views.stats.week || 0))} this week`],
+    [t.all_time ? Math.round((t.cached || 0) / t.all_time * 100) + "%" : "–", "Answered from cache", "saves free Gemini lookups"]
+  ];
+  $("tiles").innerHTML = tiles.map(([v, l, s]) => `<div class="card tile"><div class="v">${v}</div><div class="l">${esc(l)}</div><div class="d">${esc(s)}</div></div>`).join("");
+  columns($("chartCmp"), d.daily || [], "comparisons");
+  columns($("chartUsr"), d.signups || [], "new accounts");
+  ranked($("sports"), d.sports); ranked($("athletes"), d.athletes); ranked($("teams"), d.teams); ranked($("leagues"), d.leagues);
+  ranked($("views"), [["home", "Compare page"], ["stats", "Stats page"]].map(([k, n]) => ({ name: n, n: views[k] ? views[k].n : 0 })));
+  $("recent").innerHTML = (d.recent || []).length ? `<table><thead><tr><th>When</th><th>Question</th><th>Sport</th><th>Winner</th><th>Account</th></tr></thead><tbody>` +
+    d.recent.map(r => `<tr><td>${esc(ago(r.ts))}</td><td class="q">${esc(r.query)}</td><td>${esc(r.sport)}</td>
+      <td>${esc(r.winner === "a" ? r.a_name : r.winner === "b" ? r.b_name : "Even")}</td><td><span class="pill ${r.signed_in ? "y" : ""}">${r.signed_in ? "Signed in" : "Guest"}</span></td></tr>`).join("") + `</tbody></table>`
+    : `<div class="none">No comparisons yet.</div>`;
+}
+
+function ago(ts) {
+  const s = (Date.now() - ts) / 1000;
+  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function ranked(el, list) {
+  list = (list || []).filter(x => x.name);
+  if (!list.length || !list.some(x => x.n)) { el.innerHTML = `<div class="none">No data yet.</div>`; return; }
+  const max = Math.max(...list.map(x => x.n));
+  el.innerHTML = `<div class="rank">` + list.map(x => `<div class="rrow"><div class="nm"><span>${esc(x.name)}</span><div class="tr"><i style="width:${(x.n / max * 100).toFixed(1)}%"></i></div></div><div class="n">${fmt(x.n)}</div></div>`).join("") + `</div>`;
+}
+
+// One bar per day for the last 30 days (missing days = 0), with a hover tooltip
+function columns(el, rows, what) {
+  const by = Object.fromEntries(rows.map(r => [r.day, r.n]));
+  const days = [];
+  for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); const k = d.toISOString().slice(0, 10); days.push({ k, d, n: by[k] || 0 }); }
+  const max = Math.max(1, ...days.map(x => x.n));
+  const label = d => d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
+  el.innerHTML = `<div class="cols"><span class="ymax">${fmt(max)}</span>` + days.map(x => `<div class="col ${x.n ? "" : "z"}" data-t="${esc(label(x.d))}" data-n="${x.n}"><i style="height:${(x.n / max * 100).toFixed(1)}%"></i></div>`).join("")
+    + `</div><div class="axis"><span>${label(days[0].d)}</span><span>${label(days[15].d)}</span><span>Today</span></div>`;
+  el.querySelectorAll(".col").forEach(c => {
+    c.onmousemove = e => { const tp = $("tip"); tp.hidden = false; tp.innerHTML = `${esc(c.dataset.t)} · <b>${fmt(+c.dataset.n)}</b> ${what}`;
+      tp.style.left = Math.min(e.clientX + 12, innerWidth - tp.offsetWidth - 8) + "px"; tp.style.top = (e.clientY - 40) + "px"; };
+    c.onmouseleave = () => $("tip").hidden = true;
+  });
+}
+
+$("refresh").onclick = load;
+WB.onAuth(u => {
+  if (!u) { gate(`<h2>Admin dashboard</h2><p>Sign in with the site owner's account to see the stats.</p><button class="wb-btn primary" type="button" onclick="WB.signIn()">Sign in</button>`); return; }
+  load();
+});
+</script>
+</body>
+</html>

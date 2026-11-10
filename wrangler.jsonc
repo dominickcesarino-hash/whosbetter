@@ -2,8 +2,16 @@
   "name": "whosbetter",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
-  "assets": { "directory": "./public", "binding": "ASSETS" },
-  // Keep the GEMINI_API_KEY you add in the Cloudflare dashboard when redeploying
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Send page visits through the Worker too, so the admin page can count them
+    "run_worker_first": true
+  },
+  // Free Cloudflare D1 database for accounts, saved comparisons and admin stats.
+  // Cloudflare creates it automatically on the first deploy.
+  "d1_databases": [{ "binding": "DB", "database_name": "whosbetter" }],
+  // Keep the GEMINI_API_KEY / ADMIN_EMAIL you add in the Cloudflare dashboard when redeploying
   "keep_vars": true,
   "observability": { "enabled": true }
 }

@@ -1,7 +1,6 @@
-// Who's Better: server function for Cloudflare Pages (answers POST /api/compare).
-// Set GEMINI_API_KEY in Cloudflare: your Pages project > Settings > Variables and Secrets.
-// Gemini looks the stats up on Google Search
-// (grounding), then a second, separate Google-grounded pass fact-checks every number.
+// Who's Better: the AI comparison (answers POST /api/compare, routed from src/worker.js).
+// Set GEMINI_API_KEY in Cloudflare: your Worker > Settings > Variables and Secrets.
+// Gemini looks the stats up on Google Search (grounding), then a second, separate Google-grounded pass fact-checks every number.
 // Only numbers that pass the check are marked "verified" on the page.
 // Optional: set COMPARE_MODEL in Cloudflare to choose a different model.
 
@@ -23,6 +22,7 @@ Pick 6 to 8 stats that matter most in THAT sport and that exist for BOTH sides. 
 Reply with ONLY a JSON object in a \`\`\`json code block, exactly in this shape:
 {
   "sport": "Basketball",
+  "kind": "athletes",
   "a": {"name": "Full name", "info": "Position · team(s) · years", "active": false},
   "b": {"name": "Full name", "info": "Position · team(s) · years", "active": true},
   "stats": [
@@ -31,7 +31,7 @@ Reply with ONLY a JSON object in a \`\`\`json code block, exactly in this shape:
   "verdict": "2 to 3 sentences: who is better and why, fair to both, mentioning the deciding numbers.",
   "winner": "a"
 }
-Rules: values are short strings (numbers where possible, e.g. "6", "27.0", "1,124"). "better" is "higher", "lower" (e.g. ERA, goals against) or "none". "winner" is "a", "b" or "even". Never make up a number: if you can't find a stat for both, leave that stat out.
+"kind" is "athletes" or "teams". Rules: values are short strings (numbers where possible, e.g. "6", "27.0", "1,124"). "better" is "higher", "lower" (e.g. ERA, goals against) or "none". "winner" is "a", "b" or "even". Never make up a number: if you can't find a stat for both, leave that stat out.
 If this is not a comparison of two sports people or teams, reply with ONLY: {"error": "short friendly reason"}`;
 
 const VERIFY = (data, today) => `Today is ${today}. You are a strict sports fact-checker. Use Google Search to independently check every number below for ${data.a.name} (side "a") and ${data.b.name} (side "b"). Check against official league or reference sites, using the latest totals for active players.
@@ -116,6 +116,7 @@ async function handle(req, env, ctx) {
     const out = {
       query,
       sport: str(d.sport, 40),
+      kind: d.kind === "teams" ? "teams" : "athletes",
       a: { name: str(d.a.name, 60), info: str(d.a.info, 120), active: !!d.a.active },
       b: { name: str(d.b.name, 60), info: str(d.b.info, 120), active: !!d.b.active },
       stats: d.stats.slice(0, 10).map(s => ({

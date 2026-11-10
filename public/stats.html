@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports Stats — Standings &amp; Player Stats for 400+ Leagues | Who's Better?</title>
+<meta name="description" content="Live standings and player stats for hundreds of leagues worldwide: soccer, NBA, NFL, MLB, NHL, F1, rugby, cricket, tennis and more. Sort by any stat.">
+<meta name="theme-color" content="#07060d">
+<link rel="stylesheet" href="/common.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  main{max-width:1180px}
+  h1{font-size:clamp(28px,5vw,40px); letter-spacing:-.03em; margin:0 0 6px}
+  .sub{color:var(--muted); margin:0 0 20px; font-size:15px}
+  .panel{background:rgba(20,16,34,.6); border:1px solid var(--line); border-radius:20px; backdrop-filter:blur(18px)}
+  .controls{display:grid; grid-template-columns:200px 1fr; gap:10px; padding:14px}
+  label.f{display:flex; flex-direction:column; gap:5px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:700; min-width:0}
+  select,.search{background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:12px; padding:10px 12px; font-size:14.5px; outline:none; width:100%; min-width:0}
+  select:focus,.search:focus{border-color:var(--accent)}
+  select option{background:#14111f}
+  .lpick{position:relative}
+  .lres{position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:20; background:var(--panel); border:1px solid var(--line); border-radius:14px; max-height:360px; overflow:auto; padding:6px; box-shadow:0 20px 50px rgba(0,0,0,.5)}
+  .lres button{display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none; color:var(--text); padding:8px 10px; border-radius:10px; cursor:pointer; font-size:14px}
+  .lres button:hover,.lres button.hl{background:var(--glass2)}
+  .lres .sp{margin-left:auto; color:var(--dim); font-size:12px; white-space:nowrap}
+  .lres img,.lhead img{width:22px; height:22px; object-fit:contain; flex:none}
+  .lres .none{padding:14px; color:var(--muted); font-size:13.5px}
+  .favs{display:flex; flex-wrap:wrap; gap:8px; padding:0 14px 14px}
+  .favs .lbl{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:700; align-self:center; margin-right:2px}
+  .chip{display:inline-flex; align-items:center; gap:6px; background:var(--glass); border:1px solid var(--line); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:13px; cursor:pointer}
+  .chip:hover{color:var(--text); background:var(--glass2)}
+  .chip img{width:16px; height:16px; object-fit:contain}
+
+  .board{margin-top:16px; overflow:hidden}
+  .lhead{display:flex; align-items:center; gap:12px; padding:16px 16px 0; flex-wrap:wrap}
+  .lhead img{width:36px; height:36px}
+  .lhead h2{margin:0; font-size:20px; letter-spacing:-.01em}
+  .lhead .meta{color:var(--dim); font-size:12.5px}
+  .star{margin-left:auto; background:var(--glass); border:1px solid var(--line); color:var(--muted); border-radius:999px; padding:7px 13px; font-size:13px; cursor:pointer}
+  .star.on{color:#ffd76b; border-color:rgba(255,215,107,.4)}
+  .tabs{display:flex; gap:4px; padding:14px 16px 0; border-bottom:1px solid var(--line); overflow-x:auto}
+  .tabs button{background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); font-weight:600; font-size:14px; padding:9px 12px; cursor:pointer; white-space:nowrap}
+  .tabs button.on{color:var(--text); border-bottom-color:var(--a)}
+  .tabs button:disabled{opacity:.35; cursor:default}
+  .bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 16px}
+  .bar select{width:auto; padding:8px 10px; font-size:13.5px}
+  .bar .search{width:auto; flex:1; min-width:140px; padding:8px 12px; font-size:13.5px}
+  .btn{background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:8px 13px; font-size:13px; cursor:pointer; white-space:nowrap}
+  .btn:hover{background:var(--glass2)}
+  .colbox{display:flex; flex-wrap:wrap; gap:6px 14px; padding:0 16px 12px; font-size:13px; color:var(--muted)}
+  .colbox label{display:flex; align-items:center; gap:6px; cursor:pointer}
+  .sorthint{font-size:12px; color:var(--dim); padding:0 16px 10px}
+
+  .tw{overflow:auto; max-height:72vh}
+  table{border-collapse:separate; border-spacing:0; width:100%; font-size:13.5px}
+  th,td{padding:9px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--line)}
+  th{position:sticky; top:0; z-index:2; background:#15121f; color:var(--muted); font-size:11.5px; letter-spacing:.04em; font-weight:700; cursor:pointer; user-select:none}
+  th:hover{color:var(--text)}
+  th.on{color:var(--a)}
+  th .ar{display:inline-block; width:10px; margin-left:2px}
+  td{font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--muted)}
+  td.on{color:var(--text); font-weight:500; background:rgba(0,208,255,.05)}
+  th.nm,td.nm{text-align:left; position:sticky; left:0; z-index:1; background:#110e1b; font-family:Inter,sans-serif}
+  th.nm{z-index:3; background:#15121f}
+  th.rk,td.rk{text-align:center; color:var(--dim); width:36px}
+  td.nm{color:var(--text); font-size:14px; font-weight:600; min-width:180px}
+  td.nm .in{display:flex; align-items:center; gap:9px}
+  td.nm img{width:22px; height:22px; object-fit:contain; flex:none}
+  td.nm .s2{display:block; color:var(--dim); font-size:11.5px; font-weight:500}
+  tr:hover td{background:rgba(255,255,255,.035)}
+  tr:hover td.nm{background:#191524}
+  .grp td{background:rgba(198,168,255,.07)!important; color:var(--accent); font-family:Inter,sans-serif; font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; text-align:left}
+  .state{padding:40px 16px; text-align:center; color:var(--muted); font-size:14.5px}
+  .spin{width:30px; height:30px; border-radius:50%; margin:0 auto 12px; border:3px solid var(--line); border-top-color:var(--a); border-right-color:var(--b); animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .more{text-align:center; padding:14px}
+  .foot{color:var(--dim); font-size:12px; text-align:center; margin-top:18px; line-height:1.6}
+  @media (max-width:640px){
+    .controls{grid-template-columns:1fr}
+    td.nm{min-width:140px; font-size:13px}
+    th,td{padding:8px}
+  }
+</style>
+</head>
+<body data-page="stats">
+<div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<main>
+  <h1>Sports stats</h1>
+  <p class="sub">Live standings and player stats from hundreds of leagues worldwide. Tap any column to sort.</p>
+
+  <div class="panel">
+    <div class="controls">
+      <label class="f">Sport
+        <select id="sport"><option value="">All sports</option></select>
+      </label>
+      <label class="f lpick">League
+        <input class="search" id="lq" placeholder="Search leagues — Premier League, NBA, F1, Bundesliga…" autocomplete="off" aria-autocomplete="list" aria-controls="lres">
+        <div class="lres" id="lres" hidden></div>
+      </label>
+    </div>
+    <div class="favs" id="favs"></div>
+  </div>
+
+  <section class="panel board" id="board" hidden>
+    <div class="lhead" id="lhead"></div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-tab="standings" class="on">Standings</button>
+      <button type="button" data-tab="players">Player stats</button>
+    </div>
+    <div class="bar" id="bar">
+      <select id="group" aria-label="Group"></select>
+      <select id="cat" aria-label="Stat category" hidden></select>
+      <input class="search" id="filter" placeholder="Filter by name…" aria-label="Filter by name">
+      <button class="btn" id="colsBtn" type="button">Columns</button>
+    </div>
+    <div class="colbox" id="colbox" hidden></div>
+    <div class="sorthint" id="sorthint"></div>
+    <div id="table"></div>
+  </section>
+
+  <p class="foot">Data from ESPN, updated live. Your favorite leagues, sort order and columns are remembered on this device.</p>
+</main>
+
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = WB.esc;
+const SPORTS = [
+  ["soccer", "Soccer"], ["basketball", "Basketball"], ["football", "American Football"], ["baseball", "Baseball"],
+  ["hockey", "Hockey"], ["racing", "Motorsport"], ["tennis", "Tennis"], ["rugby", "Rugby Union"], ["rugby-league", "Rugby League"],
+  ["australian-football", "Aussie Rules"], ["cricket", "Cricket"], ["lacrosse", "Lacrosse"], ["volleyball", "Volleyball"]
+];
+const SPORT_NAME = Object.fromEntries(SPORTS);
+const POPULAR = ["soccer/eng.1", "basketball/nba", "football/nfl", "baseball/mlb", "hockey/nhl", "soccer/esp.1", "racing/f1", "soccer/uefa.champions", "tennis/atp", "soccer/usa.1"];
+const SITE = "https://site.api.espn.com/apis";
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("wbs-" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("wbs-" + k, JSON.stringify(v)); } catch {} }
+};
+const getJSON = async url => { const r = await fetch(url); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); };
+const num = v => { if (typeof v === "number") return v; const m = String(v ?? "").replace(/,/g, "").match(/^[+-]?\d*\.?\d+/); return m ? parseFloat(m[0]) : NaN; };
+
+// ---------- League catalog ----------
+let LEAGUES = [];
+async function loadLeagues() {
+  const cached = store.get("leagues", null);
+  if (cached && Date.now() - cached.at < 86400000 && cached.list.length > 50) return cached.list;
+  const lists = await Promise.all(SPORTS.map(async ([sport]) => {
+    try {
+      const d = await getJSON(`${SITE}/site/v2/leagues/dropdown?sport=${sport}&limit=600`);
+      return (d.leagues || [])
+        .filter(l => l.slug && (sport === "tennis" || l.hasStandings))
+        .map(l => ({ sport, slug: l.slug, name: l.name, abbr: l.abbreviation || "", logo: ((l.logos || [])[0] || {}).href || "" }));
+    } catch { return []; }
+  }));
+  const list = lists.flat();
+  if (list.length) store.set("leagues", { at: Date.now(), list });
+  return list;
+}
+const key = l => l.sport + "/" + l.slug;
+const findLeague = k => LEAGUES.find(l => key(l) === k);
+
+// ---------- League search ----------
+let hl = -1, shown = [];
+function showResults() {
+  const q = $("lq").value.trim().toLowerCase(), sp = $("sport").value;
+  shown = LEAGUES.filter(l => (!sp || l.sport === sp) && (!q || (l.name + " " + l.abbr + " " + l.slug).toLowerCase().includes(q)));
+  if (!q) {
+    const pop = POPULAR.map(findLeague).filter(Boolean).filter(l => !sp || l.sport === sp);
+    shown = [...pop, ...shown.filter(l => !pop.includes(l))];
+  }
+  shown = shown.slice(0, 80); hl = -1;
+  $("lres").innerHTML = shown.length ? shown.map((l, i) => `<button type="button" data-i="${i}">${l.logo ? `<img src="${esc(l.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""}<span>${esc(l.name)}</span><span class="sp">${esc(SPORT_NAME[l.sport])}</span></button>`).join("")
+    : `<div class="none">No leagues match “${esc($("lq").value)}”.</div>`;
+  $("lres").hidden = false;
+  $("lres").querySelectorAll("button").forEach(b => b.onmousedown = e => { e.preventDefault(); pick(shown[+b.dataset.i]); });
+}
+$("lq").addEventListener("focus", showResults);
+$("lq").addEventListener("input", showResults);
+$("lq").addEventListener("blur", () => setTimeout(() => $("lres").hidden = true, 120));
+$("lq").addEventListener("keydown", e => {
+  const bs = $("lres").querySelectorAll("button");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault(); hl = Math.max(0, Math.min(bs.length - 1, hl + (e.key === "ArrowDown" ? 1 : -1)));
+    bs.forEach((b, i) => b.classList.toggle("hl", i === hl)); bs[hl] && bs[hl].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") { e.preventDefault(); const l = shown[hl < 0 ? 0 : hl]; if (l) pick(l); }
+  else if (e.key === "Escape") $("lq").blur();
+});
+$("sport").addEventListener("change", () => { $("lq").value = ""; $("lq").focus(); });
+SPORTS.forEach(([v, n]) => $("sport").insertAdjacentHTML("beforeend", `<option value="${v}">${n}</option>`));
+
+// ---------- Favorites ----------
+function renderFavs() {
+  const favs = store.get("favs", []).map(findLeague).filter(Boolean);
+  const list = favs.length ? favs : POPULAR.slice(0, 6).map(findLeague).filter(Boolean);
+  $("favs").innerHTML = `<span class="lbl">${favs.length ? "★ Your leagues" : "Popular"}</span>` +
+    list.map(l => `<button class="chip" type="button" data-k="${esc(key(l))}">${l.logo ? `<img src="${esc(l.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(l.abbr && l.abbr.length < 14 ? l.abbr : l.name)}</button>`).join("");
+  $("favs").querySelectorAll(".chip").forEach(c => c.onclick = () => pick(findLeague(c.dataset.k)));
+}
+function toggleFav(l) {
+  let f = store.get("favs", []); const k = key(l);
+  f = f.includes(k) ? f.filter(x => x !== k) : [...f, k].slice(-16);
+  store.set("favs", f); renderFavs(); renderHead();
+}
+
+// ---------- Current view ----------
+let cur = null, tab = "standings", data = null, sortState = null, playersPage = 1;
+function pick(l) {
+  if (!l) return;
+  cur = l; $("lq").value = ""; $("lq").blur(); $("lres").hidden = true;
+  const u = new URL(location); u.searchParams.set("league", key(l)); history.replaceState(null, "", u);
+  store.set("last", key(l));
+  fetch("/api/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "league", detail: `${l.name} (${SPORT_NAME[l.sport]})` }) }).catch(() => {});
+  $("board").hidden = false; renderHead();
+  setTab(l.sport === "tennis" ? "players" : "standings");
+}
+function renderHead() {
+  if (!cur) return;
+  const fav = store.get("favs", []).includes(key(cur));
+  $("lhead").innerHTML = `${cur.logo ? `<img src="${esc(cur.logo)}" alt="" onerror="this.remove()">` : ""}<div><h2>${esc(cur.name)}</h2><div class="meta">${esc(SPORT_NAME[cur.sport])}</div></div>
+    <button class="star ${fav ? "on" : ""}" id="star" type="button">${fav ? "★ In your leagues" : "☆ Add to your leagues"}</button>`;
+  $("star").onclick = () => toggleFav(cur);
+  const tb = $("tabs").querySelectorAll("button");
+  tb[0].disabled = cur.sport === "tennis";
+  tb[1].textContent = cur.sport === "tennis" ? "Rankings" : cur.sport === "racing" ? "Driver stats" : "Player stats";
+}
+$("tabs").querySelectorAll("button").forEach(b => b.onclick = () => { if (!b.disabled) setTab(b.dataset.tab); });
+
+function setTab(t) {
+  tab = t; playersPage = 1;
+  $("tabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  $("filter").value = ""; load();
+}
+
+function loading(t) { $("table").innerHTML = `<div class="state"><div class="spin"></div>${esc(t)}</div>`; }
+function empty(t) { $("table").innerHTML = `<div class="state">${t}</div>`; $("group").hidden = $("cat").hidden = $("colsBtn").hidden = true; $("sorthint").textContent = ""; }
+
+async function load(more) {
+  const l = cur, t = tab;
+  if (!more) loading(t === "standings" ? "Loading standings…" : "Loading stats…");
+  try {
+    let d;
+    if (t === "standings") d = await loadStandings(l);
+    else if (l.sport === "tennis") d = await loadTennis(l);
+    else if (l.sport === "soccer") d = await loadSoccerPlayers(l);
+    else d = await loadPlayers(l, more ? data : null);
+    if (l !== cur || t !== tab) return;
+    if (!d || !d.groups.length || !d.groups.some(g => g.rows.length)) {
+      empty(t === "standings" ? "No standings are available for this league right now. It may be between seasons, or try Player stats."
+        : "Player stats aren't available for this league. Try Standings.");
+      return;
+    }
+    data = d; setupControls(more); draw();
+  } catch (e) {
+    if (l === cur && t === tab) empty("Couldn't load this league right now. Please try again in a moment.");
+  }
+}
+
+// ---------- Standings ----------
+const FIRST = ["rank", "playoffSeed", "gamesPlayed", "wins", "losses", "ties", "otLosses", "overtimeLosses", "points", "winPercent", "gamesBehind",
+  "pointsFor", "pointsAgainst", "pointDifferential", "championshipPts"];
+async function loadStandings(l) {
+  const d = await getJSON(`${SITE}/v2/sports/${l.sport}/${l.slug}/standings`);
+  const groups = [];
+  (function walk(n, path) {
+    const entries = n.standings && n.standings.entries;
+    if (entries && entries.length) groups.push({ name: n.name || path || l.name, entries });
+    (n.children || []).forEach(c => walk(c, c.name || path));
+  })(d, "");
+  return {
+    kind: "standings", label: d.season && d.season.displayName,
+    groups: groups.map(g => {
+      const cols = new Map();
+      const rows = g.entries.map((e, i) => {
+        const who = e.team || e.athlete || {};
+        const vals = {};
+        (e.stats || []).forEach(s => {
+          const k = s.name || s.type || s.abbreviation; if (!k || k === "overall" && s.displayValue == null) return;
+          const v = s.displayValue ?? s.summary;
+          if (v == null || v === "") return;
+          if (!cols.has(k)) cols.set(k, { key: k, label: s.abbreviation || s.shortDisplayName || s.displayName || k, title: s.displayName || s.description || k });
+          vals[k] = { d: String(v), n: typeof s.value === "number" ? s.value : num(v) };
+        });
+        return {
+          name: who.displayName || who.name || "—",
+          sub: e.note && e.note.description || (who.abbreviation && who.displayName !== who.abbreviation ? "" : ""),
+          logo: ((who.logos || [])[0] || {}).href || (who.flag && who.flag.href) || "",
+          order: i + 1, vals
+        };
+      });
+      const all = [...cols.values()].filter(c => rows.some(r => r.vals[c.key] && r.vals[c.key].d.trim() && r.vals[c.key].d !== "-"));
+      all.sort((a, b) => (FIRST.indexOf(a.key) + 1 || 99) - (FIRST.indexOf(b.key) + 1 || 99));
+      return { name: g.name, cols: all, rows };
+    })
+  };
+}
+
+// ---------- Player stats (US & college leagues) ----------
+async function loadPlayers(l, prev) {
+  const page = prev ? playersPage + 1 : 1;
+  const d = await getJSON(`https://site.web.api.espn.com/apis/common/v3/sports/${l.sport}/${l.slug}/statistics/byathlete?limit=100&page=${page}`);
+  const cats = (d.categories || []).filter(c => (c.names || []).length);
+  if (!cats.length) return null;
+  const athletes = (d.athletes || []).map(a => {
+    const at = a.athlete || {};
+    const vals = {};
+    (a.categories || []).forEach(c => {
+      const def = cats.find(x => x.name === c.name); if (!def) return;
+      (def.names || []).forEach((n, i) => {
+        const v = (c.totals || [])[i] ?? (c.values || [])[i];
+        if (v == null || v === "") return;
+        vals[c.name + "." + n + "." + i] = { d: String(v), n: num(c.values ? c.values[i] : v) };
+      });
+    });
+    return {
+      name: at.displayName || "—",
+      sub: [at.position && at.position.abbreviation, at.teamShortName || at.teamName].filter(Boolean).join(" · "),
+      logo: (at.headshot && at.headshot.href) || (at.teamLogos && at.teamLogos[0] && at.teamLogos[0].href) || "", vals
+    };
+  });
+  const pag = d.pagination || {};
+  if (prev) { playersPage = page; prev.rows.push(...athletes); prev.hasMore = page < (pag.pages || 1); prev.total = pag.count; return prev; }
+  playersPage = 1;
+  const groups = cats.map(c => ({
+    name: c.displayName || c.name,
+    cols: (() => {
+      const seen = new Set();
+      return (c.names || []).map((n, i) => {
+        let label = (c.labels || [])[i] || n;
+        const title = (c.displayNames || [])[i] || n;
+        if (seen.has(label)) label += /per game|average/i.test(title) ? "/G" : " TOT"; // e.g. PTS (per game) vs PTS TOT
+        seen.add(label);
+        return { key: c.name + "." + n + "." + i, label, title };
+      });
+    })()
+  }));
+  return { kind: "players", categories: true, groups: groups.map(g => ({ ...g, rows: athletes })), rows: athletes, hasMore: 1 < (pag.pages || 1), total: pag.count };
+}
+
+// ---------- Soccer player leaders ----------
+async function loadSoccerPlayers(l) {
+  const d = await getJSON(`${SITE}/site/v2/sports/soccer/${l.slug}/statistics`);
+  const by = new Map(), cols = [{ key: "matches", label: "MP", title: "Matches played" }];
+  (d.stats || []).forEach(cat => {
+    const k = cat.name.replace(/Leaders$/, "");
+    cols.push({ key: k, label: cat.abbreviation || cat.shortDisplayName || k, title: cat.displayName || k });
+    (cat.leaders || []).forEach(x => {
+      const a = x.athlete || {}; if (!a.id) return;
+      if (!by.has(a.id)) by.set(a.id, { name: a.displayName, sub: (a.team && a.team.displayName) || "", logo: (a.team && a.team.logos && a.team.logos[0] && a.team.logos[0].href) || "", vals: {} });
+      const r = by.get(a.id);
+      r.vals[k] = { d: String(x.value), n: x.value };
+      const m = String(x.displayValue || "").match(/Matches:\s*(\d+)/i);
+      if (m) r.vals.matches = { d: m[1], n: +m[1] };
+    });
+  });
+  const rows = [...by.values()];
+  return { kind: "players", groups: rows.length ? [{ name: "Top scorers & assists", cols, rows }] : [], note: "Top goal scorers and assist leaders" };
+}
+
+// ---------- Tennis rankings ----------
+async function loadTennis(l) {
+  const d = await getJSON(`${SITE}/site/v2/sports/tennis/${l.slug}/rankings`);
+  const r = (d.rankings || [])[0]; if (!r) return null;
+  const cols = [{ key: "rank", label: "RANK", title: "Current ranking" }, { key: "points", label: "PTS", title: "Ranking points" },
+    { key: "prev", label: "PREV", title: "Previous ranking" }, { key: "move", label: "+/−", title: "Places moved" }];
+  const rows = (r.ranks || []).map(x => {
+    const a = x.athlete || {};
+    return { name: a.displayName || "—", sub: (a.flagAltText || (a.citizenshipCountry && a.citizenshipCountry.abbreviation) || ""), logo: (a.flag && a.flag.href) || "",
+      vals: { rank: { d: String(x.current), n: x.current }, points: { d: (x.points || 0).toLocaleString(), n: x.points || 0 },
+        prev: { d: String(x.previous ?? "—"), n: num(x.previous) }, move: { d: x.previous ? String(x.previous - x.current) : "—", n: x.previous ? x.previous - x.current : NaN } } };
+  });
+  return { kind: "players", groups: [{ name: r.name || "Rankings", cols, rows }], defaultSort: { key: "rank", dir: 1 } };
+}
+
+// ---------- Controls: group/category, columns, sorting ----------
+let gi = 0;
+const prefKey = () => `pref-${tab}-${key(cur)}`;
+function setupControls(more) {
+  const pref = store.get(prefKey(), {});
+  if (!more) {
+    gi = Math.min(pref.g ?? 0, data.groups.length - 1);
+    sortState = pref.sort || data.defaultSort || null;
+  }
+  const sel = data.categories ? $("cat") : $("group");
+  $("cat").hidden = !data.categories; $("group").hidden = !!data.categories || data.groups.length < 2;
+  $("colsBtn").hidden = false;
+  const opts = data.groups.map((g, i) => `<option value="${i}">${esc(g.name)}</option>`).join("")
+    + (!data.categories && data.groups.length > 1 && sameCols() ? `<option value="-1">Everyone (combined)</option>` : "");
+  sel.innerHTML = opts; sel.value = String(gi);
+  sel.onchange = () => { gi = +sel.value; sortState = null; savePref(); draw(); };
+}
+function sameCols() { const a = data.groups.map(g => g.cols.map(c => c.key).join()); return a.every(x => x === a[0]); }
+function savePref(extra = {}) { store.set(prefKey(), { ...store.get(prefKey(), {}), g: gi, sort: sortState, ...extra }); }
+function current() {
+  if (gi === -1) return { name: "Everyone", cols: data.groups[0].cols, rows: data.groups.flatMap(g => g.rows) };
+  return data.groups[gi] || data.groups[0];
+}
+$("filter").addEventListener("input", () => draw());
+$("colsBtn").onclick = () => { $("colbox").hidden = !$("colbox").hidden; drawCols(); };
+function hiddenCols() { return store.get(prefKey(), {}).hide || []; }
+function drawCols() {
+  if ($("colbox").hidden) return;
+  const g = current(), hide = hiddenCols();
+  $("colbox").innerHTML = g.cols.map(c => `<label title="${esc(c.title)}"><input type="checkbox" data-k="${esc(c.key)}" ${hide.includes(c.key) ? "" : "checked"}>${esc(c.label)}</label>`).join("")
+    + `<button class="btn" type="button" id="showAll">Show all</button>`;
+  $("colbox").querySelectorAll("input").forEach(i => i.onchange = () => {
+    const h = new Set(hiddenCols()); i.checked ? h.delete(i.dataset.k) : h.add(i.dataset.k);
+    savePref({ hide: [...h] }); draw();
+  });
+  $("showAll").onclick = () => { savePref({ hide: [] }); drawCols(); draw(); };
+}
+
+function draw() {
+  const g = current(), hide = hiddenCols();
+  const cols = g.cols.filter(c => !hide.includes(c.key));
+  const q = $("filter").value.trim().toLowerCase();
+  let rows = g.rows.filter(r => !q || (r.name + " " + (r.sub || "")).toLowerCase().includes(q));
+  // Only show stats this group actually has (player categories share one athlete list)
+  if (data.categories) rows = rows.filter(r => cols.some(c => r.vals[c.key]));
+  if (sortState && sortState.key) {
+    const k = sortState.key, dir = sortState.dir;
+    rows = [...rows].sort((a, b) => {
+      if (k === "_name") return dir * a.name.localeCompare(b.name);
+      const x = a.vals[k] ? a.vals[k].n : NaN, y = b.vals[k] ? b.vals[k].n : NaN;
+      if (isNaN(x) && isNaN(y)) return (a.vals[k] ? a.vals[k].d : "").localeCompare(b.vals[k] ? b.vals[k].d : "") * dir;
+      if (isNaN(x)) return 1; if (isNaN(y)) return -1;
+      return (x - y) * dir;
+    });
+  } else if (gi === -1) rows = [...rows].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const sk = sortState && sortState.key;
+  const arrow = k => sk === k ? (sortState.dir > 0 ? "▲" : "▼") : "";
+  const sortedCol = cols.find(c => c.key === sk);
+  $("sorthint").textContent = sortedCol ? `Sorted by ${sortedCol.title} (${sortState.dir > 0 ? "lowest" : "highest"} first) · tap again to flip`
+    : sk === "_name" ? "Sorted by name" : data.note || "Tap a column to sort by it";
+  const total = rows.length;
+  const head = `<tr><th class="rk">#</th><th class="nm" data-k="_name">${data.kind === "standings" ? "Team" : "Name"}<span class="ar">${arrow("_name")}</span></th>`
+    + cols.map(c => `<th data-k="${esc(c.key)}" title="${esc(c.title)}" class="${sk === c.key ? "on" : ""}">${esc(c.label)}<span class="ar">${arrow(c.key)}</span></th>`).join("") + `</tr>`;
+  const body = rows.slice(0, 500).map((r, i) => `<tr><td class="rk">${sk ? i + 1 : (r.order || i + 1)}</td>
+    <td class="nm"><div class="in">${r.logo ? `<img src="${esc(r.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""}<div>${esc(r.name)}${r.sub ? `<span class="s2">${esc(r.sub)}</span>` : ""}</div></div></td>`
+    + cols.map(c => `<td class="${sk === c.key ? "on" : ""}">${r.vals[c.key] ? esc(r.vals[c.key].d) : "–"}</td>`).join("") + `</tr>`).join("");
+  $("table").innerHTML = total ? `<div class="tw"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`
+    + (data.hasMore && !q ? `<div class="more"><button class="btn" id="more" type="button">Load more players${data.total ? ` (${rows.length} of ${data.total})` : ""}</button></div>` : "")
+    : `<div class="state">Nothing matches “${esc($("filter").value)}”.</div>`;
+  $("table").querySelectorAll("th[data-k]").forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    // Numbers sort highest-first on the first tap; names A→Z
+    sortState = sk === k ? { key: k, dir: -sortState.dir } : { key: k, dir: k === "_name" || /rank|seed|^rk$/i.test(k) ? 1 : -1 };
+    savePref(); draw();
+  });
+  if ($("more")) $("more").onclick = async () => { $("more").disabled = true; $("more").textContent = "Loading…"; await load(true); };
+  drawCols();
+}
+
+// ---------- Start ----------
+(async () => {
+  $("lq").placeholder = "Loading leagues…";
+  LEAGUES = await loadLeagues();
+  $("lq").placeholder = `Search ${LEAGUES.length}+ leagues — Premier League, NBA, F1, Bundesliga…`;
+  renderFavs();
+  const want = new URLSearchParams(location.search).get("league") || store.get("last", null) || "soccer/eng.1";
+  pick(findLeague(want) || findLeague("basketball/nba") || LEAGUES[0]);
+})();
+</script>
+</body>
+</html>

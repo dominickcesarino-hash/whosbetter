@@ -1,0 +1,80 @@
+/* Shared look for every Who's Better page */
+:root{
+  --bg:#07060d; --text:#f3f1ff; --muted:#a8a1c7; --dim:#7f7899;
+  --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.1); --line:rgba(255,255,255,.13);
+  --panel:#14111f; --a:#00d0ff; --b:#ff4fb3; --violet:#6d3cff; --ok:#7ef0c8; --warn:#ffb86b; --bad:#ff8a9a; --accent:#c6a8ff;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh}
+button,input,select{font-family:inherit}
+a{color:var(--accent)}
+.aurora{position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none}
+.blob{position:absolute; border-radius:50%; filter:blur(100px); opacity:.35}
+.b1{width:560px;height:560px;background:var(--a);top:-260px;left:-200px}
+.b2{width:560px;height:560px;background:var(--b);top:-200px;right:-240px}
+.b3{width:600px;height:400px;background:var(--violet);bottom:-260px;left:25%;opacity:.3}
+main{position:relative; z-index:1; margin:0 auto; padding:20px 16px 60px}
+
+/* Header */
+.wb-head{position:relative; z-index:5; display:flex; align-items:center; gap:14px; margin-bottom:26px; flex-wrap:wrap}
+.wb-logo{font-weight:800; font-size:20px; letter-spacing:-.02em; text-decoration:none; color:var(--text); margin-right:auto}
+.wb-logo span{background:linear-gradient(90deg,var(--a),var(--b)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.wb-nav{display:flex; gap:4px; padding:4px; border-radius:999px; background:var(--glass); border:1px solid var(--line)}
+.wb-nav a{color:var(--muted); text-decoration:none; font-size:13.5px; font-weight:600; padding:7px 14px; border-radius:999px}
+.wb-nav a:hover{color:var(--text)}
+.wb-nav a.on{background:var(--glass2); color:var(--text)}
+.wb-acct{position:relative}
+.wb-btn{background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:8px 14px; font-size:13.5px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px}
+.wb-btn:hover{background:var(--glass2)}
+.wb-btn.primary{border:none; color:#07060d; background:linear-gradient(90deg,var(--a),var(--b))}
+.wb-av{width:24px; height:24px; border-radius:50%; display:grid; place-items:center; background:var(--accent); color:#07060d; font-size:12px; font-weight:800; overflow:hidden}
+.wb-av img{width:100%; height:100%; object-fit:cover}
+.wb-menu{position:absolute; right:0; top:calc(100% + 8px); min-width:220px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:6px; box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.wb-menu .who{padding:8px 10px 10px; font-size:12.5px; color:var(--muted); border-bottom:1px solid var(--line); margin-bottom:4px; overflow-wrap:anywhere}
+.wb-menu .who b{display:block; color:var(--text); font-size:14px}
+.wb-menu a,.wb-menu button{display:block; width:100%; text-align:left; background:none; border:none; color:var(--text); font-size:14px; padding:9px 10px; border-radius:10px; text-decoration:none; cursor:pointer}
+.wb-menu a:hover,.wb-menu button:hover{background:var(--glass2)}
+
+/* Modal */
+.wb-over{position:fixed; inset:0; z-index:50; background:rgba(4,3,10,.7); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:16px}
+.wb-over.open{display:flex}
+.wb-modal{width:100%; max-width:380px; background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:22px; position:relative}
+.wb-modal h2{margin:0 0 4px; font-size:21px}
+.wb-modal p.sub{margin:0 0 16px; color:var(--muted); font-size:13.5px}
+.wb-x{position:absolute; top:12px; right:12px; background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; line-height:1}
+.wb-modal input{width:100%; background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:12px; padding:11px 13px; font-size:15px; margin-bottom:9px; outline:none}
+.wb-modal input:focus{border-color:var(--accent)}
+.wb-modal .full{width:100%; justify-content:center; padding:11px 14px; font-size:14.5px}
+.wb-or{display:flex; align-items:center; gap:10px; color:var(--dim); font-size:12px; margin:14px 0}
+.wb-or:before,.wb-or:after{content:""; flex:1; height:1px; background:var(--line)}
+.wb-msg{font-size:13px; margin:4px 0 10px; color:var(--bad)}
+.wb-msg.ok{color:var(--ok)}
+.wb-links{display:flex; justify-content:space-between; margin-top:12px; font-size:13px}
+.wb-links button{background:none; border:none; color:var(--accent); cursor:pointer; padding:0; font-size:13px}
+
+/* Drawer (saved comparisons) */
+.wb-drawer{position:fixed; top:0; right:0; bottom:0; z-index:40; width:min(380px,100%); background:var(--panel); border-left:1px solid var(--line); transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column}
+.wb-drawer.open{transform:none}
+.wb-drawer .dh{display:flex; align-items:center; justify-content:space-between; padding:18px 18px 12px; border-bottom:1px solid var(--line)}
+.wb-drawer .dh h3{margin:0; font-size:17px}
+.wb-drawer .list{overflow:auto; padding:8px; flex:1}
+.wb-item{display:flex; align-items:center; gap:6px; border-radius:12px}
+.wb-item:hover{background:var(--glass)}
+.wb-item .open{flex:1; min-width:0; text-align:left; background:none; border:none; color:var(--text); padding:10px; cursor:pointer}
+.wb-item .t{font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.wb-item .m{font-size:12px; color:var(--dim); margin-top:2px}
+.wb-item .del{background:none; border:none; color:var(--dim); font-size:16px; padding:8px 10px; cursor:pointer; border-radius:8px}
+.wb-item .del:hover{color:var(--bad)}
+.wb-empty{color:var(--muted); font-size:14px; text-align:center; padding:30px 16px; line-height:1.5}
+.wb-scrim{position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.4); display:none}
+.wb-scrim.open{display:block}
+
+@media (max-width:560px){
+  .wb-head{gap:10px}
+  .wb-nav{order:3; width:100%; justify-content:center}
+  .wb-nav a{flex:1; text-align:center}
+}
+.spin{width:30px; height:30px; border-radius:50%; margin:0 auto 12px; border:3px solid var(--line); border-top-color:var(--a); border-right-color:var(--b); animation:wbspin .9s linear infinite}
+@keyframes wbspin{to{transform:rotate(360deg)}}

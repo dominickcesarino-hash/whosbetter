@@ -8,28 +8,12 @@
 <meta name="theme-color" content="#07060d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/common.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#07060d; --text:#f3f1ff; --muted:#a8a1c7; --dim:#7f7899;
-    --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.1); --line:rgba(255,255,255,.13);
-    --a:#00d0ff; --b:#ff4fb3; --violet:#6d3cff; --ok:#7ef0c8; --warn:#ffb86b; --accent:#c6a8ff;
-  }
-  *{box-sizing:border-box}
-  [hidden]{display:none!important}
-  html,body{margin:0}
-  body{background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh}
-  button,input{font-family:inherit}
-  a{color:var(--accent)}
-  .aurora{position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none}
-  .blob{position:absolute; border-radius:50%; filter:blur(100px); opacity:.35}
-  .b1{width:560px;height:560px;background:var(--a);top:-260px;left:-200px}
-  .b2{width:560px;height:560px;background:var(--b);top:-200px;right:-240px}
-  .b3{width:600px;height:400px;background:var(--violet);bottom:-260px;left:25%;opacity:.3}
-  main{position:relative; z-index:1; max-width:860px; margin:0 auto; padding:28px 16px 60px}
-  header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:28px}
-  .logo{font-weight:800; font-size:20px; letter-spacing:-.02em; text-decoration:none; color:var(--text)}
-  .logo span{background:linear-gradient(90deg,var(--a),var(--b)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  main{max-width:860px}
+  .savenote{margin-top:10px; font-size:12.5px; color:var(--muted)}
+  .savenote button{background:none; border:none; color:var(--accent); padding:0; font:inherit; cursor:pointer}
   h1{font-size:clamp(30px,6vw,48px); line-height:1.05; letter-spacing:-.03em; margin:0 0 10px; text-align:center}
   .sub{color:var(--muted); text-align:center; margin:0 0 24px; font-size:15.5px}
   form{display:flex; gap:8px; padding:6px; border-radius:999px; background:var(--glass); border:1px solid var(--line); backdrop-filter:blur(16px)}
@@ -108,13 +92,9 @@
   }
 </style>
 </head>
-<body>
+<body data-page="home">
 <div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 <main>
-  <header>
-    <a class="logo" href="/">Who's <span>Better?</span></a>
-  </header>
-
   <h1>Settle the debate.</h1>
   <p class="sub">Any two athletes or teams, any sport. Stats are looked up live on Google and fact-checked.</p>
 
@@ -133,10 +113,11 @@
   Numbers with a ✓ were confirmed; ones with a ? couldn't be confirmed. Tap “Sources” to check them yourself.</p>
 </main>
 
+<script src="/common.js"></script>
 <script>
 const EXAMPLES = ["LeBron or Jordan?", "Messi or Ronaldo?", "Brady or Mahomes?", "Federer or Djokovic?", "Hamilton or Verstappen?", "Gretzky or Ovechkin?", "Ohtani or Babe Ruth?", "Serena or Steffi Graf?", "Tiger or Jack Nicklaus?", "Lakers or Celtics?"];
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+var $ = id => document.getElementById(id);
+var esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = s => { const m = String(s).replace(/,/g, "").match(/-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
 const initials = n => n.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "?";
 
@@ -165,8 +146,7 @@ async function run(q, fresh){
   timer = setInterval(() => { if (i < steps.length - 1) $("stxt").textContent = steps[++i]; }, 6000);
   const u = new URL(location); u.searchParams.set("q", q); history.replaceState(null, "", u);
   try {
-    const res = await fetch("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q, fresh: !!fresh }) });
-    const d = await res.json().catch(() => ({ error: "Something went wrong. Please try again." }));
+    const d = await WB.api("/api/compare", { method: "POST", body: JSON.stringify({ q, fresh: !!fresh }) });
     if (d.error) throw new Error(d.error);
     render(d); recent(q);
   } catch (e) {
@@ -221,11 +201,13 @@ function render(d){
     <div class="foot">
       <div class="frow">${badge}<div class="acts"><button class="btn" id="share" type="button">Share</button><button class="btn" id="again" type="button">↻ Refresh</button></div></div>
       <div class="legend">Stats as of ${esc(d.asOf)}${d.cached ? " (saved result)" : ""}. ✓ = confirmed by a second Google search · ? = couldn't be confirmed.</div>
+      <div class="savenote">${d.savedId ? "✓ Saved to My comparisons" : d.fromSaved ? "Saved comparison" : `<button type="button" id="saveHint">Sign in</button> to save your comparisons.`}</div>
       ${src ? `<details class="src"><summary>Sources (${d.sources.length})</summary><ul>${src}</ul></details>` : ""}
     </div>
   </div>`;
 
   $("again").onclick = () => run(d.query, true);
+  if ($("saveHint")) $("saveHint").onclick = () => WB.signIn();
   $("share").onclick = async () => {
     const url = location.origin + location.pathname + "?q=" + encodeURIComponent(d.query);
     const text = `${d.a.name} vs ${d.b.name}: ${wname}${d.winner === "even" ? "" : " wins"}. ${d.verdict}`;
@@ -235,8 +217,18 @@ function render(d){
 }
 
 $("f").addEventListener("submit", e => { e.preventDefault(); run($("q").value); });
-const start = new URLSearchParams(location.search).get("q");
-if (start) run(start);
+const params = new URLSearchParams(location.search);
+const savedId = params.get("saved"), start = params.get("q");
+if (savedId) {
+  // Open a saved comparison from "My comparisons" (no new lookup needed)
+  WB.onAuth(async u => {
+    if (!u) { if (start) run(start); else WB.signIn(); return; }
+    const d = await WB.api("/api/history?id=" + encodeURIComponent(savedId));
+    if (d.error) { $("err").textContent = d.error; $("err").hidden = false; return; }
+    d.fromSaved = true; $("q").value = d.query || ""; render(d);
+    const u2 = new URL(location); u2.searchParams.delete("saved"); u2.searchParams.set("q", d.query || ""); history.replaceState(null, "", u2);
+  });
+} else if (start) WB.onAuth(() => { if (!run.started) { run.started = true; run(start); } });
 </script>
 </body>
 </html>
