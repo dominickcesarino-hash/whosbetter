@@ -30,7 +30,7 @@ Use ONLY the source pages below. Do not use your own memory for any number.
 ${pages("a", A)}
 ${pages("b", B)}
 
-Pick 6 to 8 stats that matter most in ${sport} and that appear in the sources for BOTH sides. Include championships/titles and major awards when the sources list them (e.g. rings and MVPs in the NBA, league titles and Ballon d'Ors in soccer, Grand Slams in tennis, world championships and race wins in F1). Prefer ESPN for career stats (it is the most up to date) and Wikipedia for titles and awards.
+Pick 6 to 8 stats that matter most in ${sport} and that appear in the sources for BOTH sides. Include championships/titles and major awards when the sources list them (e.g. rings and MVPs in the NBA, league titles and Ballon d'Ors in soccer, Grand Slams in tennis, world championships and race wins in F1). Only use stats where higher or lower is clearly better (no trivia like founding year, height, age or jersey number). Prefer ESPN for career stats (it is the most up to date) and Wikipedia for titles and awards.
 For every value, copy a short exact quote (3 to 12 words) from that side's source that contains the number, e.g. "PTS 26.7" or "4× NBA champion". The quote must appear word for word in the source.
 
 Reply with JSON only, in this shape:

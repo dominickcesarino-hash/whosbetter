@@ -62,11 +62,26 @@ async function wikiPage(title, search) {
   let d = await getJSON(`${base}&action=parse&prop=wikitext&redirects=1&page=${encodeURIComponent(t)}`).catch(() => null);
   if ((!d || d.error) && search && title) return wikiPage(null, search);
   if (!d || !d.parse) return null;
-  return { title: d.parse.title, url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(d.parse.title.replace(/ /g, "_")), text: wikiExtract(d.parse.wikitext || "") };
+  // The rendered infobox + summary has every template filled in with real numbers (e.g. F1 wins, career totals)
+  const top = await getJSON(`${base}&action=parse&prop=text&section=0&redirects=1&disablelimitreport=1&page=${encodeURIComponent(d.parse.title)}`)
+    .then(x => htmlText(x.parse && x.parse.text)).catch(() => "");
+  return { title: d.parse.title, url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(d.parse.title.replace(/ /g, "_")), text: wikiExtract(d.parse.wikitext || "", top) };
+}
+
+// Turn Wikipedia's rendered HTML into plain text, one infobox row per line
+function htmlText(html) {
+  if (!html) return "";
+  return String(html)
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/<sup[^>]*class="[^"]*reference[\s\S]*?<\/sup>/gi, "")
+    .replace(/<span[^>]*class="[^"]*(?:noprint|mw-editsection)[^"]*"[\s\S]*?<\/span>/gi, "")
+    .replace(/<\/(tr|p|li|h\d|div|table|caption)>|<br\s*\/?>/gi, "\n").replace(/<\/t[hd]>/gi, " | ")
+    .replace(/<[^>]+>/g, "").replace(/&#160;|&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/\[\d+\]|\[[a-z]\]/g, "").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim();
 }
 
 // Keep the infobox, the opening summary, and stats / honours / records sections, each with its own size budget.
-function wikiExtract(w) {
+function wikiExtract(w, top = "") {
   w = w.replace(/<ref[^>]*\/>/gi, "").replace(/<ref[\s\S]*?<\/ref>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
   const parts = [];
   const ib = w.indexOf("{{Infobox");
@@ -84,6 +99,7 @@ function wikiExtract(w) {
   }
   const firstHead = w.search(/\n==[^=]/);
   parts.push(clean(w.slice(ibEnd, firstHead > ibEnd ? firstHead : ibEnd + 4000)).trim().slice(0, 1800));
+  if (top && top.length > 300) parts.splice(0, parts.length, top.slice(0, 7000)); // rendered infobox + summary replaces the raw wikitext
   // Only top-level (== Heading ==) sections, so career-story subsections don't crowd out the stats
   const sec = /\n(==)\s*([^=\n]*(statistic|honou?r|award|achievement|record|career summary|accomplishment|titles|trophies|results)[^=\n]*)\s*==(?!=)/gi;
   let m, used = parts.join("").length;
@@ -157,4 +173,4 @@ export function verify(value, quote, sources) {
   return null;
 }
 
-export const _wikiExtract = wikiExtract; // for tests
+export const _wikiExtract = wikiExtract; export const _htmlText = htmlText; // for tests
