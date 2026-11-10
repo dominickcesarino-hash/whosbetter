@@ -68,20 +68,6 @@ export default {
         return stats ? json(200, stats) : json(500, { error: "The database isn't connected yet." });
       }
 
-      if (path === "/api/_espntest") { // TEMP: which ESPN endpoints can the Worker reach?
-        const urls = ["https://site.web.api.espn.com/apis/search/v2?query=LeBron%20James&limit=5",
-          "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/1966/stats",
-          "https://site.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/1966/stats",
-          "https://site.api.espn.com/apis/search/v2?query=LeBron%20James&limit=5",
-          "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes/1966/statistics",
-          "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/1966",
-          "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/1966/overview"];
-        const out = {};
-        for (const u of urls) for (const ua of ["", "WhosBetter/1.0"]) {
-          try { const r = await fetch(u, { headers: ua ? { "User-Agent": ua } : {} }); out[(ua ? "UA " : "") + u] = r.status; } catch (e) { out[u] = String(e); }
-        }
-        return json(200, out);
-      }
       if (path.startsWith("/api/")) return json(404, { error: "Not found" });
 
       if (request.method === "GET" && PAGES[path]) bg(logEvent(env, "view:" + PAGES[path], "", null));

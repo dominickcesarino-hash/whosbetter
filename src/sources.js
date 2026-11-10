@@ -21,7 +21,7 @@ async function getJSON(url, ttl = 6 * 3600) {
 
 // ---------- ESPN ----------
 async function espnFind(name, sportHint) {
-  const d = await getJSON(`https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(name)}&limit=5`);
+  const d = await getJSON(`https://site.api.espn.com/apis/search/v2?query=${encodeURIComponent(name)}&limit=5`);
   const hits = [];
   for (const r of d.results || []) if (r.type === "player" || r.type === "team") hits.push(...(r.contents || []).map(c => ({ ...c, kind: r.type })));
   if (!hits.length) return null;
@@ -38,7 +38,7 @@ async function espnFind(name, sportHint) {
 // Flatten ESPN career stat tables into short readable lines Gemini can quote exactly.
 async function espnStats(hit) {
   if (!hit || hit.kind !== "player" || !STATS_LEAGUES.includes(hit.league) || !hit.id) return "";
-  const d = await getJSON(`https://site.web.api.espn.com/apis/common/v3/sports/${hit.sport}/${hit.league}/athletes/${hit.id}/stats`);
+  const d = await getJSON(`https://site.api.espn.com/apis/common/v3/sports/${hit.sport}/${hit.league}/athletes/${hit.id}/stats`);
   const lines = [];
   for (const c of d.categories || []) {
     const labels = c.labels || [], totals = c.totals || [];
