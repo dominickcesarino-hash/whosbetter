@@ -9,7 +9,7 @@
 // Optional: set COMPARE_MODEL in Cloudflare to choose a different model.
 import { gather, verify } from "./sources.js";
 
-let MODEL = "gemini-flash-latest";    // always points at Google's current Flash model
+let MODEL = "gemini-flash-lite-latest"; // Google's current fast Flash-Lite model (quick and generous free limits)
 const MAX_QUERY = 120;
 const CACHE_SECONDS = 6 * 60 * 60;     // same matchup within 6 hours reuses the checked result
 
@@ -64,14 +64,19 @@ const str = (v, n) => (typeof v === "string" ? v : typeof v === "number" ? Strin
 // Ask Gemini. Falls back to other models if one is busy or out of free quota.
 async function ask(key, prompt, maxTokens) {
   const models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-flash-latest"])];
+  const started = Date.now();
   const payload = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
   });
   const errs = [];
   for (const m of models) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
-      { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload });
+    if (Date.now() - started > 50000) break;                     // don't keep the visitor waiting forever
+    let r;
+    try {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
+        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload, signal: AbortSignal.timeout(45000) });
+    } catch (e) { errs.push(`${m}: timed out`); continue; }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 300));

@@ -4,8 +4,8 @@
 const UA = "WhosBetter/1.0 (https://whosbetter.sportsdebate.workers.dev; sports comparison site)";
 const SPORT_IDS = { 40: "basketball", 20: "football", 10: "baseball", 70: "hockey", 600: "soccer", 850: "tennis", 2000: "racing" };
 const STATS_LEAGUES = ["nba", "wnba", "nfl", "mlb", "nhl", "mens-college-basketball", "college-football"];
-const MAX_WIKI = 14000;
-const MAX_ESPN = 5000;
+const MAX_WIKI = 9000;
+const MAX_ESPN = 3500;
 
 // Fetch JSON, keeping a copy in Cloudflare's cache for a few hours (kind to Wikipedia/ESPN, and faster)
 async function getJSON(url, ttl = 6 * 3600) {
