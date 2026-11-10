@@ -91,6 +91,31 @@
   .legend{margin-top:10px; color:var(--dim); font-size:11.5px}
   .disc{margin-top:26px; text-align:center; color:var(--dim); font-size:12px; line-height:1.6}
   .recent{margin-top:18px; text-align:center}
+  /* League leaders */
+  .leaders{margin-top:44px}
+  .leaders h2{font-size:24px; letter-spacing:-.02em; margin:0 0 4px; text-align:center}
+  .leaders .lsub{color:var(--muted); font-size:14px; text-align:center; margin:0 0 16px}
+  .ltabs{display:flex; gap:6px; overflow-x:auto; padding:2px 2px 10px; scrollbar-width:none; justify-content:center; flex-wrap:wrap}
+  .ltabs button{flex:none; background:var(--glass); border:1px solid var(--line); color:var(--muted); border-radius:999px; padding:8px 14px; font-size:13.5px; font-weight:600; cursor:pointer}
+  .ltabs button.on{background:linear-gradient(90deg,rgba(0,208,255,.2),rgba(255,79,179,.2)); color:var(--text); border-color:rgba(255,255,255,.25)}
+  .lgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:12px}
+  .lcard{background:rgba(20,16,34,.6); border:1px solid var(--line); border-radius:18px; padding:14px; backdrop-filter:blur(14px); display:flex; flex-direction:column}
+  .lcard h3{margin:0 0 10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  .lrow{display:flex; align-items:center; gap:10px; width:100%; background:none; border:none; color:var(--text); padding:7px 6px; border-radius:10px; cursor:pointer; text-align:left; font:inherit}
+  .lrow:hover{background:var(--glass2)}
+  .lrow .rk{width:16px; color:var(--dim); font-size:12px; font-weight:700; text-align:center; flex:none}
+  .lrow img{width:34px; height:34px; border-radius:50%; object-fit:cover; background:var(--glass2); flex:none}
+  .lrow .nm{flex:1; min-width:0}
+  .lrow .nm b{display:block; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lrow .nm span{display:block; font-size:11.5px; color:var(--dim)}
+  .lrow .v{font-family:"JetBrains Mono",monospace; font-size:15px; font-weight:500}
+  .lrow:first-of-type .v{color:var(--a)}
+  .lvs{margin-top:auto; padding-top:10px}
+  .lvs button{width:100%; background:var(--glass); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer}
+  .lvs button:hover{background:var(--glass2)}
+  .lstate{color:var(--muted); text-align:center; padding:26px 10px; font-size:14px; grid-column:1/-1}
+  .lfoot{color:var(--dim); font-size:12px; text-align:center; margin-top:10px}
+  .lfoot a{color:var(--accent)}
   .recent .rh{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:6px}
 
   @media (max-width:560px){
@@ -120,6 +145,14 @@
   <div class="err" id="err" hidden></div>
   <div id="out"></div>
   <div class="recent" id="recent" hidden><div class="rh">Recent</div><div class="chips" id="rlist" style="margin:0"></div></div>
+
+  <section class="leaders" id="leaders">
+    <h2>League leaders</h2>
+    <p class="lsub">Who's on top right now. Tap a player to start a debate.</p>
+    <div class="ltabs" id="ltabs" role="tablist"></div>
+    <div class="lgrid" id="lgrid"><div class="lstate">Loading…</div></div>
+    <p class="lfoot">Live from ESPN · <a href="/stats">Full standings &amp; stats for 250+ leagues →</a></p>
+  </section>
 
   <p class="disc">Stats come from ESPN and Wikipedia. Google's Gemini AI picks the stats and writes the verdict, then every number is checked word for word against the source page.
   Numbers with a ✓ were found in the source; ones with a ? couldn't be matched. Tap “Sources” to check them yourself.</p>
@@ -279,6 +312,76 @@ function render(d){
 }
 
 $("f").addEventListener("submit", e => { e.preventDefault(); run($("q").value); });
+
+// ---------- League leaders (live from ESPN, loaded in the browser) ----------
+const LEAGUES = [
+  { id: "nba", name: "🏀 NBA", path: "basketball/nba", cats: ["pointsPerGame", "reboundsPerGame", "assistsPerGame"] },
+  { id: "nfl", name: "🏈 NFL", path: "football/nfl", cats: ["passingYards", "rushingYards", "receivingYards"] },
+  { id: "mlb", name: "⚾ MLB", path: "baseball/mlb", cats: ["homeRuns", "avg", "strikeouts"], q: "&seasontype=2" },
+  { id: "nhl", name: "🏒 NHL", path: "hockey/nhl", cats: ["points", "goals", "assists"] },
+  { id: "eng.1", name: "⚽ Premier League", soccer: true },
+  { id: "esp.1", name: "⚽ La Liga", soccer: true }
+];
+const LABELS = { pointsPerGame: "Points per game", reboundsPerGame: "Rebounds per game", assistsPerGame: "Assists per game",
+  passingYards: "Passing yards", rushingYards: "Rushing yards", receivingYards: "Receiving yards", homeRuns: "Home runs",
+  avg: "Batting average", strikeouts: "Strikeouts (pitching)", points: "Points", goals: "Goals", assists: "Assists" };
+function fmtVal(cat, x) {
+  const v = x.value;
+  if (cat === "avg") return v.toFixed(3).replace(/^0/, "");
+  if (typeof x.displayValue === "string" && x.displayValue.length <= 8) return x.displayValue;
+  return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1);
+}
+async function loadLeaders(L) {
+  const k = "wb-leaders-" + L.id;
+  try { const c = JSON.parse(sessionStorage.getItem(k) || "null"); if (c && Date.now() - c.at < 600000) return c.cards; } catch {}
+  let cards = [];
+  if (L.soccer) {
+    const d = await (await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${L.id}/statistics`)).json();
+    cards = (d.stats || []).map(c => ({ title: c.displayName || c.name, rows: (c.leaders || []).slice(0, 5).map(x => ({
+      name: x.athlete.displayName, team: (x.athlete.team && x.athlete.team.abbreviation) || (x.athlete.team && x.athlete.team.displayName) || "",
+      img: (x.athlete.team && x.athlete.team.logos && x.athlete.team.logos[0] && x.athlete.team.logos[0].href) || "", v: String(x.value) })) }));
+  } else {
+    const d = await (await fetch(`https://site.api.espn.com/apis/site/v3/sports/${L.path}/leaders?limit=5${L.q || ""}`)).json();
+    const cats = (d.leaders && d.leaders.categories) || [];
+    cards = L.cats.map(name => cats.find(c => c.name === name)).filter(Boolean).map(c => ({ title: LABELS[c.name] || c.displayName, rows: (c.leaders || []).slice(0, 5).map(x => ({
+      name: x.athlete.displayName, team: (x.team && x.team.abbreviation) || "", img: (x.athlete.headshot && x.athlete.headshot.href) || "", v: fmtVal(c.name, x) })) }));
+  }
+  cards = cards.filter(c => c.rows.length);
+  try { sessionStorage.setItem(k, JSON.stringify({ at: Date.now(), cards })); } catch {}
+  return cards;
+}
+let curLeague = null;
+async function showLeague(id) {
+  curLeague = id;
+  try { localStorage.setItem("wb-league", id); } catch {}
+  $("ltabs").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.id === id); b.setAttribute("aria-selected", b.dataset.id === id); });
+  const L = LEAGUES.find(x => x.id === id);
+  $("lgrid").innerHTML = `<div class="lstate">Loading ${esc(L.name)} leaders…</div>`;
+  let cards;
+  try { cards = await loadLeaders(L); } catch { cards = null; }
+  if (curLeague !== id) return;
+  if (!cards || !cards.length) { $("lgrid").innerHTML = `<div class="lstate">No leaders to show for ${esc(L.name)} right now. It may be between seasons.</div>`; return; }
+  $("lgrid").innerHTML = cards.map(c => `<div class="lcard"><h3>${esc(c.title)}</h3>
+    ${c.rows.map((r, i) => `<button class="lrow" type="button" data-name="${esc(r.name)}"><span class="rk">${i + 1}</span>
+      ${r.img ? `<img src="${esc(r.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<img alt="" style="visibility:hidden">`}
+      <span class="nm"><b>${esc(r.name)}</b><span>${esc(r.team)}</span></span><span class="v">${esc(r.v)}</span></button>`).join("")}
+    ${c.rows.length > 1 ? `<div class="lvs"><button type="button" data-q="${esc(c.rows[0].name + " or " + c.rows[1].name + "?")}">⚔️ Compare #1 vs #2</button></div>` : ""}</div>`).join("");
+  $("lgrid").querySelectorAll(".lrow").forEach(b => b.onclick = () => {
+    $("q").value = b.dataset.name + " or ";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setTimeout(() => { $("q").focus(); $("q").setSelectionRange($("q").value.length, $("q").value.length); }, 350);
+  });
+  $("lgrid").querySelectorAll(".lvs button").forEach(b => b.onclick = () => { window.scrollTo({ top: 0, behavior: "smooth" }); run(b.dataset.q); });
+}
+$("ltabs").innerHTML = LEAGUES.map(L => `<button type="button" role="tab" data-id="${L.id}">${L.name}</button>`).join("");
+$("ltabs").querySelectorAll("button").forEach(b => b.onclick = () => showLeague(b.dataset.id));
+// Load when the section scrolls into view, so it doesn't slow down the top of the page
+let firstLeague = "nba"; try { firstLeague = localStorage.getItem("wb-league") || "nba"; } catch {}
+if (!LEAGUES.some(L => L.id === firstLeague)) firstLeague = "nba";
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); showLeague(firstLeague); } }, { rootMargin: "300px" });
+  io.observe($("leaders"));
+} else showLeague(firstLeague);
 const params = new URLSearchParams(location.search);
 const savedId = params.get("saved"), start = params.get("q");
 if (savedId) {
