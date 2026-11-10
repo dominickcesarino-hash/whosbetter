@@ -4,7 +4,7 @@
 // Only numbers that pass the check are marked "verified" on the page.
 // Optional: set COMPARE_MODEL in Cloudflare to choose a different model.
 
-let MODEL = "gemini-2.5-flash";       // supports Google Search grounding on the free tier
+let MODEL = "gemini-flash-latest";    // always points at Google's current Flash model (supports Google Search)
 const MAX_QUERY = 120;
 const CACHE_SECONDS = 6 * 60 * 60;     // same matchup within 6 hours reuses the checked result
 
@@ -55,20 +55,21 @@ const str = (v, n) => (typeof v === "string" ? v : typeof v === "number" ? Strin
 
 // Ask Gemini with Google Search turned on. Falls back to other models if one is busy or out of quota.
 async function grounded(key, prompt) {
-  const models = [...new Set([MODEL, "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash"])];
+  const models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"])];
   const payload = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     tools: [{ google_search: {} }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
   });
-  let last = { status: 502, quota: false };
+  let last = { status: 502, quota: false }; const errs = [];
   for (const m of models) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 400));
-      last = { status: r.status, quota: r.status === 429, msg: str(data.error && data.error.message, 200), model: m };
+      errs.push(`${m}: ${r.status} ${str(data.error && data.error.message, 160)}`);
+      last = { status: r.status, quota: r.status === 429 && !errs.some(e => !/: 429 /.test(e)), msg: errs.join(" | "), model: m };
       continue;
     }
     const cand = (data.candidates || [])[0] || {};
@@ -164,7 +165,7 @@ async function handle(req, env, ctx) {
   } catch (e) {
     if (e && e.quota) return json(429, { error: "Who's Better has used up its free lookups for now. Please try again later." });
     console.error(e);
-    const detail = e && e.msg ? `Gemini ${e.status} (${e.model}): ${e.msg}` : String(e && e.message || e).slice(0, 200);
+    const detail = e && e.msg ? `Gemini: ${e.msg}` : String(e && e.message || e).slice(0, 200);
     if (e && /api key/i.test(e.msg || "")) return json(500, { error: "The Gemini API key isn't valid. Check GEMINI_API_KEY in Cloudflare.", detail });
     return json(502, { error: "Couldn't reach the stats service. Please try again.", detail });
   }
