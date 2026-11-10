@@ -23,10 +23,12 @@ Only accounts whose verified email matches the `ADMIN_EMAIL` secret (set in Clou
 ## Verified, up-to-date stats (free)
 
 For each comparison:
-1. Gemini works out who is being compared.
-2. The site fetches each side's career stats from ESPN and their Wikipedia page (cached for a few hours).
+1. Gemini works out who is being compared (full names).
+2. The server fetches official league data (MLB.com and NHL.com career stats and awards) and each side's Wikipedia page.
 3. Gemini builds the card using only those pages, quoting the exact text each number came from.
 4. Code (not AI) checks that every quote really appears in the source page and contains the same number. Matches get a ✓, anything else gets a ?, and stats that can't be checked on either side are left out.
+5. This shared result is cached for 6 hours, so popular matchups are instant and free for everyone.
+6. For active NBA/WNBA/NFL/college players, the visitor's browser then looks them up on ESPN by full name (ESPN blocks Cloudflare's servers) and the card refreshes with ESPN's latest career stats. That refreshed card is only for that visitor and is never shared or cached for others.
 
 Sources are listed under each card so anyone can double-check.
 

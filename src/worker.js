@@ -2,7 +2,7 @@
 // API routes live here; everything else is the website in /public.
 import { onRequestPost as compare } from "./compare.js";
 import { getUser, isAdmin } from "./auth.js";
-import { touchUser, logComparison, logEvent, history, getSaved, unsave, adminStats } from "./db.js";
+import { touchUser, logComparison, logEvent, history, getSaved, unsave, adminStats, updateSaved } from "./db.js";
 
 const json = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
@@ -20,10 +20,16 @@ export default {
       if (path === "/api/compare") {
         if (request.method !== "POST") return json(405, { error: "Method not allowed" });
         const user = await getUser(request, env);
+        const reqBody = await request.clone().json().catch(() => ({}));
         const res = await compare({ request, env, waitUntil: p => ctx.waitUntil(p) });
         if (res.status !== 200) return res;
         const body = await res.json();
         if (body.error || !body.stats) return json(200, body);
+        if (body.enhanced) {
+          // The ESPN refresh of a comparison we already counted: update the saved copy, don't log it twice
+          if (user && reqBody.savedId) { await updateSaved(env, user, Number(reqBody.savedId), body).catch(() => {}); body.savedId = reqBody.savedId; }
+          return json(200, body);
+        }
         if (user) { await touchUser(env, user).catch(() => {}); body.savedId = await logComparison(env, user, body).catch(() => null); }
         else bg(logComparison(env, null, body));
         return json(200, body);

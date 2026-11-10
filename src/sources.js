@@ -125,27 +125,90 @@ function clean(t) {
     .replace(/(?:style|bgcolor|colspan|rowspan|class|align|scope)="[^"]*"\s*\|?/gi, "").replace(/\{\{(?:double-dagger|dagger|bold|abbr|tooltip)[^}]*\}\}/gi, "").replace(/\|\s*\|/g, "|").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
 }
 
-// Gather everything for one side of the comparison.
-const nameKey = n => String(n || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z ]/g, "").trim();
+// ---------- Official league data (free, works from Cloudflare) ----------
+const nameKey = n => String(n || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+const pickByName = (list, name, get) => list.find(x => nameKey(get(x)) === nameKey(name)) || null;
 
-// "browserEspn" is ESPN data the visitor's browser fetched (ESPN often blocks Cloudflare's servers).
-// It's only used when the server couldn't reach ESPN and the player's name matches.
+const MLB_LABELS = {
+  hitting: { gamesPlayed: "Games", atBats: "At bats", runs: "Runs", hits: "Hits", doubles: "Doubles", triples: "Triples", homeRuns: "Home runs",
+    rbi: "RBI", stolenBases: "Stolen bases", baseOnBalls: "Walks", strikeOuts: "Strikeouts", avg: "Batting average", obp: "OBP", slg: "SLG", ops: "OPS", totalBases: "Total bases" },
+  pitching: { gamesPitched: "Games pitched", gamesStarted: "Games started", wins: "Wins", losses: "Losses", era: "ERA", inningsPitched: "Innings pitched",
+    strikeOuts: "Strikeouts", baseOnBalls: "Walks", saves: "Saves", completeGames: "Complete games", shutouts: "Shutouts", whip: "WHIP" }
+};
+async function mlbStats(name) {
+  const s = await getJSON(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(name)}`);
+  const p = pickByName(s.people || [], name, x => x.fullName) || (s.people || [])[0];
+  if (!p) return null;
+  const [d, aw] = await Promise.all([
+    getJSON(`https://statsapi.mlb.com/api/v1/people/${p.id}?hydrate=stats(group=[hitting,pitching],type=[career])`),
+    getJSON(`https://statsapi.mlb.com/api/v1/people/${p.id}/awards`).catch(() => ({}))
+  ]);
+  const person = (d.people || [])[0] || {};
+  const lines = [];
+  for (const st of person.stats || []) {
+    const g = st.group && st.group.displayName, stat = st.splits && st.splits[0] && st.splits[0].stat;
+    if (!stat || !MLB_LABELS[g]) continue;
+    lines.push(`MLB career ${g}: ` + Object.entries(MLB_LABELS[g]).filter(([k]) => stat[k] != null).map(([k, l]) => `${l} ${stat[k]}`).join(" | "));
+  }
+  const counts = {};
+  for (const a of aw.awards || []) { const n = a.name || a.id; (counts[n] = counts[n] || []).push(a.season); }
+  const top = Object.entries(counts).filter(([n]) => /mvp|cy young|rookie of the year|silver slugger|gold glove|all-star|world series|batting champion|hank aaron|comeback/i.test(n));
+  if (top.length) lines.push("MLB awards: " + top.map(([n, ys]) => `${n}: ${ys.length}`).join(" | "));
+  if (!lines.length) return null;
+  return { id: "mlb", label: "MLB.com", name: p.fullName, active: !!p.active, title: `MLB.com — ${p.fullName} career stats`, url: `https://www.mlb.com/player/${p.id}`, text: lines.join("\n") };
+}
+
+const NHL_LABELS = { gamesPlayed: "Games played", goals: "Goals", assists: "Assists", points: "Points", plusMinus: "Plus/minus", pim: "Penalty minutes",
+  powerPlayGoals: "Power-play goals", gameWinningGoals: "Game-winning goals", shots: "Shots", wins: "Wins", losses: "Losses", shutouts: "Shutouts",
+  goalsAgainstAvg: "Goals against average", savePctg: "Save percentage" };
+async function nhlStats(name) {
+  const s = await getJSON(`https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=20&q=${encodeURIComponent(name)}`);
+  const p = pickByName(Array.isArray(s) ? s : [], name, x => x.name);
+  if (!p) return null;
+  const d = await getJSON(`https://api-web.nhle.com/v1/player/${p.playerId}/landing`);
+  const ct = d.careerTotals || {}, lines = [];
+  const fmt = (k, v) => /Pctg$/.test(k) && v < 1 ? v.toFixed(3) : typeof v === "number" && !Number.isInteger(v) ? v.toFixed(2) : v;
+  for (const [part, label] of [["regularSeason", "regular season"], ["playoffs", "playoffs"]]) {
+    const t = ct[part]; if (!t) continue;
+    lines.push(`NHL career ${label}: ` + Object.entries(NHL_LABELS).filter(([k]) => t[k] != null).map(([k, l]) => `${l} ${fmt(k, t[k])}`).join(" | "));
+  }
+  const aw = (d.awards || []).map(a => `${a.trophy && a.trophy.default}: ${(a.seasons || []).length}`);
+  if (aw.length) lines.push("NHL awards and trophies: " + aw.join(" | "));
+  if (!lines.length) return null;
+  return { id: "nhl", label: "NHL.com", name: p.name, active: !!p.active, title: `NHL.com — ${p.name} career stats`, url: `https://www.nhl.com/player/${p.playerId}`, text: lines.join("\n") };
+}
+
+async function official(name, sport) {
+  const sp = String(sport || "").toLowerCase();
+  if (/baseball|mlb/.test(sp)) return mlbStats(name);
+  if (/hockey|nhl/.test(sp) && !/field/.test(sp)) return nhlStats(name);
+  return null;
+}
+
+// Sports where the visitor's browser can add ESPN career stats (ESPN blocks Cloudflare's servers)
+export const espnSport = sport => /basketball|nba|wnba|american football|nfl|gridiron|college football/i.test(String(sport || ""));
+
+// Gather everything for one side of the comparison.
+// "browserEspn" is ESPN data the visitor's browser fetched; it's only used when the player's name matches,
+// and those results are never shared with other visitors.
 export async function gather(side, sport, browserEspn = []) {
   const notes = [];
-  const [hit, wiki] = await Promise.all([
-    espnFind(side.name, sport).catch(e => { notes.push("espn search: " + e.message); return null; }),
-    wikiPage(side.wiki, `${side.name} ${sport || ""}`).catch(e => { notes.push("wikipedia: " + e.message); return null; })
+  const [off, wiki, hit] = await Promise.all([
+    side.kind === "teams" ? null : official(side.name, sport).catch(e => { notes.push("official: " + e.message); return null; }),
+    wikiPage(side.wiki, `${side.name} ${sport || ""}`).catch(e => { notes.push("wikipedia: " + e.message); return null; }),
+    espnFind(side.name, sport).catch(e => { notes.push("espn search: " + e.message); return null; })
   ]);
-  if (hit) notes.push(`espn: ${hit.kind} ${hit.sport}/${hit.league} ${hit.id}`);
-  const espn = hit ? await espnStats(hit).catch(e => { notes.push("espn stats: " + e.message); return ""; }) : "";
+  const espn = hit && !off ? await espnStats(hit).catch(e => { notes.push("espn stats: " + e.message); return ""; }) : "";
   const sources = [];
-  if (espn) sources.push({ id: "espn", title: `ESPN — ${hit.name} career stats`, url: hit.url, text: espn });
+  if (off) sources.push(off);
+  if (espn) sources.push({ id: "espn", label: "ESPN", title: `ESPN — ${hit.name} career stats`, url: hit.url, text: espn });
   else {
-    const b = browserEspn.find(x => x && nameKey(x.name) && (nameKey(x.name) === nameKey(side.name) || nameKey(x.name) === nameKey(hit && hit.name)));
-    if (b) { sources.push({ id: "espn", title: `ESPN — ${b.name} career stats`, url: b.url, text: b.text, viaBrowser: true }); notes.push("espn: from browser"); }
+    const b = browserEspn.find(x => x && nameKey(x.name) && nameKey(x.name) === nameKey(side.name));
+    if (b) sources.push({ id: "espn", label: "ESPN", title: `ESPN — ${b.name} career stats`, url: b.url, text: b.text, viaBrowser: true });
   }
-  if (wiki && wiki.text) sources.push({ id: "wiki", title: `Wikipedia — ${wiki.title}`, url: wiki.url, text: wiki.text });
-  return { name: (hit && hit.name) || side.name, team: hit && hit.team, sources, notes };
+  if (wiki && wiki.text) sources.push({ id: "wiki", label: "Wikipedia", title: `Wikipedia — ${wiki.title}`, url: wiki.url, text: wiki.text, wikiTitle: wiki.title });
+  const live = sources.some(s => s.id !== "wiki"); // has up-to-date league data
+  return { name: (off && off.name) || (hit && hit.name) || side.name, wiki: wiki && wiki.title, live, sources, notes };
 }
 
 // ---------- Verification ----------

@@ -45,6 +45,13 @@ export async function logEvent(env, type, detail, user) {
     .bind(Date.now(), clip(type, 30), clip(detail, 120), user ? user.uid : null).run();
 }
 
+// Replace a saved comparison with its ESPN-updated version (only the owner's own row)
+export async function updateSaved(env, user, id, r) {
+  const d = await db(env); if (!d || !id) return;
+  await d.prepare(`UPDATE comparisons SET result = ?1, winner = ?2 WHERE id = ?3 AND uid = ?4 AND saved = 1`)
+    .bind(JSON.stringify(r).slice(0, 60000), clip(r.winner, 5), id, user.uid).run();
+}
+
 export async function history(env, user) {
   const d = await db(env); if (!d) return [];
   const { results } = await d.prepare(`SELECT id, ts, query, sport, a_name, b_name, winner FROM comparisons

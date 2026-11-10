@@ -7,7 +7,7 @@
 //  3. Gemini builds the card using ONLY those pages, quoting the exact text each number came from.
 //  4. A number gets a ✓ only if that quote really appears in the source page (checked by code, not AI).
 // Optional: set COMPARE_MODEL in Cloudflare to choose a different model.
-import { gather, verify } from "./sources.js";
+import { gather, verify, espnSport } from "./sources.js";
 
 let MODEL = "gemini-flash-lite-latest"; // Google's current fast Flash-Lite model (quick and generous free limits)
 const MAX_QUERY = 120;
@@ -30,7 +30,7 @@ Use ONLY the source pages below. Do not use your own memory for any number.
 ${pages("a", A)}
 ${pages("b", B)}
 
-Pick 6 to 8 stats that matter most in ${sport} and that appear in the sources for BOTH sides. Include championships/titles and major awards when the sources list them (e.g. rings and MVPs in the NBA, league titles and Ballon d'Ors in soccer, Grand Slams in tennis, world championships and race wins in F1). Only use stats where higher or lower is clearly better (no trivia like founding year, height, age or jersey number). Prefer ESPN for career stats (it is the most up to date) and Wikipedia for titles and awards.
+Pick 6 to 8 stats that matter most in ${sport} and that appear in the sources for BOTH sides. Include championships/titles and major awards when the sources list them (e.g. rings and MVPs in the NBA, league titles and Ballon d'Ors in soccer, Grand Slams in tennis, world championships and race wins in F1). Only use stats where higher or lower is clearly better (no trivia like founding year, height, age or jersey number). Prefer MLB.com, NHL.com or ESPN for career stats and awards (they are the most up to date) and Wikipedia for titles and honours.
 For every value, copy a short exact quote (3 to 12 words) from that side's source that contains the number, e.g. "PTS 26.7" or "4× NBA champion". The quote must appear word for word in the source.
 
 Reply with JSON only, in this shape:
@@ -103,9 +103,11 @@ async function handle(req, env, ctx) {
 
   // Cache by the normalized question (same matchup within 6 hours reuses the checked result)
   const norm = query.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-  const cacheKey = new Request("https://whosbetter.cache/v3/" + encodeURIComponent(norm));
+  const cacheKey = new Request("https://whosbetter.cache/v4/" + encodeURIComponent(norm));
   const cache = typeof caches !== "undefined" ? caches.default : null;
-  if (cache && body.fresh !== true) {
+  // "enhance": a second pass where the visitor's browser adds ESPN's latest stats. Never cached or shared.
+  const enhance = body.enhance === true;
+  if (cache && body.fresh !== true && !enhance) {
     const hit = await cache.match(cacheKey).catch(() => null);
     if (hit) return json(200, { ...(await hit.json()), cached: true });
   }
@@ -113,19 +115,27 @@ async function handle(req, env, ctx) {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "America/New_York" });
 
   try {
-    // 1) Who is being compared?
-    const id = parseJSON(await ask(key, IDENTIFY(query, today), 400));
-    if (!id) return json(502, { error: "Couldn't understand that one. Try two full names, like \"LeBron James or Michael Jordan\"." });
-    if (id.error) return json(200, { error: str(id.error, 200) });
+    // 1) Who is being compared? (An enhance request reuses the names from the first pass.)
+    let id;
+    if (enhance) {
+      const b = body.base || {};
+      if (!b.a || !b.b) return json(400, { error: "Bad request" });
+      id = { sport: b.sport, kind: b.kind, a: b.a, b: b.b };
+    } else {
+      id = parseJSON(await ask(key, IDENTIFY(query, today), 400));
+      if (!id) return json(502, { error: "Couldn't understand that one. Try two full names, like \"LeBron James or Michael Jordan\"." });
+      if (id.error) return json(200, { error: str(id.error, 200) });
+    }
     if (!id.a || !id.b || !id.a.name || !id.b.name) return json(200, { error: "Type two names, like \"LeBron or Jordan?\"" });
     const sport = str(id.sport, 40) || "Sports";
-    const side = s => ({ name: str(s.name, 80), wiki: str(s.wiki, 120) });
+    const kind = id.kind === "teams" ? "teams" : "athletes";
+    const side = s => ({ name: str(s.name, 80), wiki: str(s.wiki, 120), kind });
 
-    // 2) Fetch ESPN + Wikipedia for both sides
-    // ESPN data the browser fetched for us (checked and size-limited)
-    const browserEspn = (Array.isArray(body.espn) ? body.espn : []).slice(0, 2)
+    // 2) Fetch official league data (MLB/NHL), ESPN and Wikipedia for both sides
+    const browserEspn = !enhance ? [] : (Array.isArray(body.espn) ? body.espn : []).slice(0, 2)
       .filter(x => x && typeof x.text === "string" && typeof x.name === "string" && /^https:\/\/www\.espn\.com\//.test(String(x.url)))
       .map(x => ({ name: str(x.name, 80), url: str(x.url, 200), text: x.text.slice(0, 3500) }));
+    if (enhance && !browserEspn.length) return json(400, { error: "Nothing to add." });
     const [A, B] = await Promise.all([gather(side(id.a), sport, browserEspn), gather(side(id.b), sport, browserEspn)]);
     for (const s of [A, B]) if (!s.sources.length)
       return json(200, { error: `Couldn't find stats for ${s.name}. Check the spelling or try their full name.` });
@@ -144,32 +154,36 @@ async function handle(req, env, ctx) {
       const va = verify(out.a, s.a_quote, A.sources), vb = verify(out.b, s.b_quote, B.sources);
       if (va) { out.a_ok = true; used.set(va.url, va); }
       if (vb) { out.b_ok = true; used.set(vb.url, vb); }
-      out.source = [va, vb].filter(Boolean).map(v => v.id === "espn" ? "ESPN" : "Wikipedia").filter((x, i, a) => a.indexOf(x) === i).join(" & ");
+      out.source = [va, vb].filter(Boolean).map(v => v.label).filter((x, i, a) => a.indexOf(x) === i).join(" & ");
       return out;
     }).filter(s => s.label && s.a && s.b && (s.a_ok || s.b_ok)); // drop stats that couldn't be checked at all
 
     if (stats.length < 2)
       return json(200, { error: "Couldn't find enough verified stats for both sides. Try full names, like \"LeBron James or Michael Jordan\"." });
 
+    const aActive = !!(d.a && d.a.active), bActive = !!(d.b && d.b.active);
     const out = {
       query,
       sport,
-      kind: id.kind === "teams" ? "teams" : "athletes",
-      a: { name: A.name, info: str(d.a && d.a.info, 120), active: !!(d.a && d.a.active) },
-      b: { name: B.name, info: str(d.b && d.b.info, 120), active: !!(d.b && d.b.active) },
+      kind,
+      a: { name: A.name, info: str(d.a && d.a.info, 120), active: aActive },
+      b: { name: B.name, info: str(d.b && d.b.info, 120), active: bActive },
       stats,
       verdict: str(d.verdict, 600),
       winner: ["a", "b", "even"].includes(d.winner) ? d.winner : "even",
       asOf: today,
       verified: true,
       sources: [...A.sources, ...B.sources].map(s => ({ title: s.title, url: s.url, used: used.has(s.url) })),
-      espnUsed: [...A.sources, ...B.sources].some(s => s.id === "espn")
+      // Names for the browser's ESPN lookup and the enhance pass
+      base: { sport, kind, a: { name: A.name, wiki: A.wiki || "" }, b: { name: B.name, wiki: B.wiki || "" } },
+      // Sides that could use ESPN's latest numbers: active athletes in ESPN sports without live league data already
+      espnWanted: kind === "athletes" && espnSport(sport) ? [[A, aActive], [B, bActive]].filter(([x, act]) => act && !x.live).map(([x]) => x.name) : [],
+      enhanced: enhance
     };
 
-    // Results that used browser-supplied ESPN data are never shared with other visitors
-    const shareable = ![...A.sources, ...B.sources].some(s => s.viaBrowser);
-    const res = json(200, out, { "Cache-Control": shareable ? `public, max-age=${CACHE_SECONDS}` : "no-store" });
-    if (shareable && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
+    // Only the shared first pass is cached for everyone; ESPN-enhanced results stay with that visitor
+    const res = json(200, out, { "Cache-Control": enhance ? "no-store" : `public, max-age=${CACHE_SECONDS}` });
+    if (!enhance && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
     return res;
   } catch (e) {
     if (e && e.quota) return json(429, { error: "Who's Better has used up its free AI lookups for now. Please try again later." });
