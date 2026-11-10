@@ -4,7 +4,7 @@
 const UA = "WhosBetter/1.0 (https://whosbetter.sportsdebate.workers.dev; sports comparison site)";
 const SPORT_IDS = { 40: "basketball", 20: "football", 10: "baseball", 70: "hockey", 600: "soccer", 850: "tennis", 2000: "racing" };
 const STATS_LEAGUES = ["nba", "wnba", "nfl", "mlb", "nhl", "mens-college-basketball", "college-football"];
-const MAX_WIKI = 9000;
+const MAX_WIKI = 12000;
 const MAX_ESPN = 3500;
 
 // Fetch JSON, keeping a copy in Cloudflare's cache for a few hours (kind to Wikipedia/ESPN, and faster)
@@ -104,15 +104,17 @@ function clean(t) {
 
 // Gather everything for one side of the comparison.
 export async function gather(side, sport) {
+  const notes = [];
   const [hit, wiki] = await Promise.all([
-    espnFind(side.name, sport).catch(() => null),
-    wikiPage(side.wiki, `${side.name} ${sport || ""}`).catch(() => null)
+    espnFind(side.name, sport).catch(e => { notes.push("espn search: " + e.message); return null; }),
+    wikiPage(side.wiki, `${side.name} ${sport || ""}`).catch(e => { notes.push("wikipedia: " + e.message); return null; })
   ]);
-  const espn = hit ? await espnStats(hit).catch(() => "") : "";
+  if (hit) notes.push(`espn: ${hit.kind} ${hit.sport}/${hit.league} ${hit.id}`);
+  const espn = hit ? await espnStats(hit).catch(e => { notes.push("espn stats: " + e.message); return ""; }) : "";
   const sources = [];
   if (espn) sources.push({ id: "espn", title: `ESPN — ${hit.name} career stats`, url: hit.url, text: espn });
   if (wiki && wiki.text) sources.push({ id: "wiki", title: `Wikipedia — ${wiki.title}`, url: wiki.url, text: wiki.text });
-  return { name: (hit && hit.name) || side.name, team: hit && hit.team, sources };
+  return { name: (hit && hit.name) || side.name, team: hit && hit.team, sources, notes };
 }
 
 // ---------- Verification ----------

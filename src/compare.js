@@ -103,7 +103,7 @@ async function handle(req, env, ctx) {
 
   // Cache by the normalized question (same matchup within 6 hours reuses the checked result)
   const norm = query.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-  const cacheKey = new Request("https://whosbetter.cache/v2/" + encodeURIComponent(norm));
+  const cacheKey = new Request("https://whosbetter.cache/v3/" + encodeURIComponent(norm));
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache && body.fresh !== true) {
     const hit = await cache.match(cacheKey).catch(() => null);
@@ -157,7 +157,8 @@ async function handle(req, env, ctx) {
       winner: ["a", "b", "even"].includes(d.winner) ? d.winner : "even",
       asOf: today,
       verified: true,
-      sources: [...A.sources, ...B.sources].map(s => ({ title: s.title, url: s.url, used: used.has(s.url) }))
+      sources: [...A.sources, ...B.sources].map(s => ({ title: s.title, url: s.url, used: used.has(s.url) })),
+      diag: [...A.notes, ...B.notes].slice(0, 8)
     };
 
     const res = json(200, out, { "Cache-Control": `public, max-age=${CACHE_SECONDS}` });
