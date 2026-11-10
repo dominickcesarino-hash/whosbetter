@@ -61,34 +61,43 @@ function parseJSON(text) {
 
 const str = (v, n) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "").trim().slice(0, n);
 
-// Ask Gemini. Falls back to other models if one is busy or out of free quota.
+// Ask Gemini. If Google is busy (503/500/timeout) it waits briefly and retries, and falls back to other
+// models; models that don't exist for this key (404) or are out of free quota (429) are skipped.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function ask(key, prompt, maxTokens) {
-  const models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-flash-latest"])];
+  let models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"])];
   const started = Date.now();
   const payload = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
   });
   const errs = [];
-  for (const m of models) {
-    if (Date.now() - started > 50000) break;                     // don't keep the visitor waiting forever
-    let r;
-    try {
-      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
-        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload, signal: AbortSignal.timeout(45000) });
-    } catch (e) { errs.push(`${m}: timed out`); continue; }
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 300));
-      errs.push(`${m}: ${r.status} ${str(data.error && data.error.message, 90)}`);
-      continue;
+  for (let round = 0; round < 3 && models.length; round++) {
+    if (round) await sleep(1500 * round);                       // give Google a moment when it's overloaded
+    const next = [];
+    for (const m of models) {
+      if (Date.now() - started > 45000) break;                   // don't keep the visitor waiting forever
+      let r;
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
+          { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload, signal: AbortSignal.timeout(30000) });
+      } catch (e) { errs.push(`${m}: timed out`); next.push(m); continue; }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 300));
+        errs.push(`${m}: ${r.status} ${str(data.error && data.error.message, 90)}`);
+        if (r.status >= 500) next.push(m);                       // busy: worth another try
+        continue;
+      }
+      const cand = (data.candidates || [])[0] || {};
+      const text = ((cand.content && cand.content.parts) || []).map(p => p.thought ? "" : (p.text || "")).join("").trim();
+      if (text) return text;
+      errs.push(`${m}: empty reply`); next.push(m);
     }
-    const cand = (data.candidates || [])[0] || {};
-    const text = ((cand.content && cand.content.parts) || []).map(p => p.thought ? "" : (p.text || "")).join("").trim();
-    if (text) return text;
-    errs.push(`${m}: empty reply`);
+    models = next;
   }
-  throw { quota: errs.length && errs.every(e => /: 429 /.test(e)), msg: errs.join(" | ") };
+  throw { quota: errs.length && errs.every(e => /: 429 /.test(e)),
+          busy: errs.some(e => /: 5\d\d |timed out/.test(e)), msg: errs.join(" | ") };
 }
 
 async function handle(req, env, ctx) {
@@ -187,6 +196,7 @@ async function handle(req, env, ctx) {
     return res;
   } catch (e) {
     if (e && e.quota) return json(429, { error: "Who's Better has used up its free AI lookups for now. Please try again later." });
+    if (e && e.busy) return json(503, { busy: true, error: "Google's AI is very busy right now. Please try again in a minute." });
     console.error(e);
     return json(502, { error: "Couldn't reach the stats service. Please try again.", detail: e && e.msg ? `Gemini: ${e.msg}` : String(e && e.message || e).slice(0, 200) });
   }

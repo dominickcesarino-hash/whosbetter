@@ -242,6 +242,13 @@ async function run(q, fresh){
   let d = null;
   try {
     d = await WB.api("/api/compare", { method: "POST", body: JSON.stringify({ q, fresh: !!fresh }) });
+    if (d.busy) {
+      // Google's AI is overloaded: wait a few seconds and try once more before showing an error
+      clearInterval(timer); $("stxt").textContent = "Google's AI is busy. Trying again…";
+      await new Promise(r => setTimeout(r, 4000));
+      $("stxt").textContent = "Almost there…";
+      d = await WB.api("/api/compare", { method: "POST", body: JSON.stringify({ q, fresh: !!fresh }) });
+    }
     if (d.error) throw new Error(d.error);
     render(d); recent(q);
   } catch (e) {
