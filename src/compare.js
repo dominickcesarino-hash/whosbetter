@@ -84,7 +84,7 @@ async function grounded(key, prompt) {
     if (text) return { text, sources, searched };
   }
   // Diagnose: does the key work at all without Google Search?
-  if (last.status === 429) {
+  if (errs.some(e => /: 429 /.test(e))) {
     try {
       const t = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`, {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
