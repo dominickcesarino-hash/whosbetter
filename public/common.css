@@ -19,7 +19,8 @@ main{position:relative; z-index:1; margin:0 auto; padding:20px 16px 60px}
 
 /* Header */
 .wb-head{position:relative; z-index:5; display:flex; align-items:center; gap:14px; margin-bottom:26px; flex-wrap:wrap}
-.wb-logo{font-weight:800; font-size:20px; letter-spacing:-.02em; text-decoration:none; color:var(--text); margin-right:auto}
+.wb-logo{display:flex; align-items:center; gap:9px; font-weight:800; font-size:20px; letter-spacing:-.02em; text-decoration:none; color:var(--text); margin-right:auto}
+.wb-logo img{width:32px; height:32px; flex:none}
 .wb-logo span{background:linear-gradient(90deg,var(--a),var(--b)); -webkit-background-clip:text; background-clip:text; color:transparent}
 .wb-nav{display:flex; gap:4px; padding:4px; border-radius:999px; background:var(--glass); border:1px solid var(--line)}
 .wb-nav a{color:var(--muted); text-decoration:none; font-size:13.5px; font-weight:600; padding:7px 14px; border-radius:999px}

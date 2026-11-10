@@ -37,7 +37,7 @@ const page = document.body.dataset.page || "";
 const head = document.createElement("header");
 head.className = "wb-head";
 head.innerHTML = `
-  <a class="wb-logo" href="/">Who's <span>Better?</span></a>
+  <a class="wb-logo" href="/"><img src="/brand/icon.svg" alt="" width="32" height="32">Who's&nbsp;<span>Better?</span></a>
   <nav class="wb-nav">
     <a href="/" class="${page === "home" ? "on" : ""}">Compare</a>
     <a href="/stats" class="${page === "stats" ? "on" : ""}">Stats</a>
