@@ -4,7 +4,7 @@
 const UA = "WhosBetter/1.0 (https://whosbetter.sportsdebate.workers.dev; sports comparison site)";
 const SPORT_IDS = { 40: "basketball", 20: "football", 10: "baseball", 70: "hockey", 600: "soccer", 850: "tennis", 2000: "racing" };
 const STATS_LEAGUES = ["nba", "wnba", "nfl", "mlb", "nhl", "mens-college-basketball", "college-football"];
-const MAX_WIKI = 12000;
+const MAX_WIKI = 13000;
 const MAX_ESPN = 3500;
 
 // Fetch JSON, keeping a copy in Cloudflare's cache for a few hours (kind to Wikipedia/ESPN, and faster)
@@ -65,30 +65,37 @@ async function wikiPage(title, search) {
   return { title: d.parse.title, url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(d.parse.title.replace(/ /g, "_")), text: wikiExtract(d.parse.wikitext || "") };
 }
 
-// Keep the infobox, the opening summary, and stats / honours / records sections. Strip references and markup noise.
+// Keep the infobox, the opening summary, and stats / honours / records sections, each with its own size budget.
 function wikiExtract(w) {
   w = w.replace(/<ref[^>]*\/>/gi, "").replace(/<ref[\s\S]*?<\/ref>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
   const parts = [];
   const ib = w.indexOf("{{Infobox");
+  let ibEnd = 0;
   if (ib >= 0) {
-    let depth = 0, end = ib;
+    let depth = 0;
     for (let i = ib; i < w.length - 1; i++) {
       if (w[i] === "{" && w[i + 1] === "{") { depth++; i++; }
-      else if (w[i] === "}" && w[i + 1] === "}") { depth--; i++; if (depth === 0) { end = i + 1; break; } }
+      else if (w[i] === "}" && w[i + 1] === "}") { depth--; i++; if (depth === 0) { ibEnd = i + 1; break; } }
     }
-    parts.push(w.slice(ib, end));
+    const box = clean(w.slice(ib, ibEnd)).split("\n")
+      .filter(l => !/^\s*\|\s*(image|caption|alt|signature|logo|website|module_|medaltemplates|youth|pronunciation|honorific|upright)/i.test(l) && !/\{\{Medal/i.test(l))
+      .join("\n");
+    parts.push(box.slice(0, 5000));
   }
   const firstHead = w.search(/\n==[^=]/);
-  parts.push(w.slice(ib >= 0 ? w.indexOf("\n", ib + 10) : 0, firstHead > 0 ? firstHead : 3000).replace(/\{\{Infobox[\s\S]*/i, "").slice(0, 2500));
-  const sec = /\n(==+)\s*([^=\n]*(statistic|honou?r|award|achievement|record|career summary|accomplishment|championship|titles|trophies|results)[^=\n]*)\s*\1/gi;
-  let m;
-  while ((m = sec.exec(w)) && parts.join("").length < MAX_WIKI * 1.6) {
-    const start = m.index, level = m[1].length;
-    const rest = w.slice(start + m[0].length);
+  parts.push(clean(w.slice(ibEnd, firstHead > ibEnd ? firstHead : ibEnd + 4000)).trim().slice(0, 1800));
+  // Only top-level (== Heading ==) sections, so career-story subsections don't crowd out the stats
+  const sec = /\n(==)\s*([^=\n]*(statistic|honou?r|award|achievement|record|career summary|accomplishment|titles|trophies|results)[^=\n]*)\s*==(?!=)/gi;
+  let m, used = parts.join("").length;
+  while ((m = sec.exec(w)) && used < MAX_WIKI) {
+    const level = m[1].length;
+    const rest = w.slice(m.index + m[0].length);
     const next = rest.search(new RegExp(`\\n={2,${level}}[^=]`));
-    parts.push(m[0] + (next > 0 ? rest.slice(0, next) : rest).slice(0, 6000));
+    const body = clean(m[2] + "\n" + (next > 0 ? rest.slice(0, next) : rest)).slice(0, 4500);
+    parts.push(body); used += body.length;
+    if (next > 0) sec.lastIndex = m.index + m[0].length + next;
   }
-  return clean(parts.join("\n")).slice(0, MAX_WIKI);
+  return parts.join("\n\n").slice(0, MAX_WIKI);
 }
 
 function clean(t) {
@@ -99,11 +106,15 @@ function clean(t) {
     .replace(/\[\[(?:File|Image):[^\]]*\]\]/gi, "")
     .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1").replace(/\[\[([^\]]*)\]\]/g, "$1")
     .replace(/'''?/g, "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ")
-    .replace(/style="[^"]*"\s*\|/g, "").replace(/\|\s*\|/g, "|").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
+    .replace(/(?:style|bgcolor|colspan|rowspan|class|align|scope)="[^"]*"\s*\|?/gi, "").replace(/\{\{(?:double-dagger|dagger|bold|abbr|tooltip)[^}]*\}\}/gi, "").replace(/\|\s*\|/g, "|").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
 }
 
 // Gather everything for one side of the comparison.
-export async function gather(side, sport) {
+const nameKey = n => String(n || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z ]/g, "").trim();
+
+// "browserEspn" is ESPN data the visitor's browser fetched (ESPN often blocks Cloudflare's servers).
+// It's only used when the server couldn't reach ESPN and the player's name matches.
+export async function gather(side, sport, browserEspn = []) {
   const notes = [];
   const [hit, wiki] = await Promise.all([
     espnFind(side.name, sport).catch(e => { notes.push("espn search: " + e.message); return null; }),
@@ -113,12 +124,18 @@ export async function gather(side, sport) {
   const espn = hit ? await espnStats(hit).catch(e => { notes.push("espn stats: " + e.message); return ""; }) : "";
   const sources = [];
   if (espn) sources.push({ id: "espn", title: `ESPN — ${hit.name} career stats`, url: hit.url, text: espn });
+  else {
+    const b = browserEspn.find(x => x && nameKey(x.name) && (nameKey(x.name) === nameKey(side.name) || nameKey(x.name) === nameKey(hit && hit.name)));
+    if (b) { sources.push({ id: "espn", title: `ESPN — ${b.name} career stats`, url: b.url, text: b.text, viaBrowser: true }); notes.push("espn: from browser"); }
+  }
   if (wiki && wiki.text) sources.push({ id: "wiki", title: `Wikipedia — ${wiki.title}`, url: wiki.url, text: wiki.text });
   return { name: (hit && hit.name) || side.name, team: hit && hit.team, sources, notes };
 }
 
 // ---------- Verification ----------
-const norm = s => String(s || "").toLowerCase().replace(/[–—]/g, "-").replace(/[×]/g, "x").replace(/[^a-z0-9.%+\-x ]+/g, " ").replace(/\s+/g, " ").trim();
+const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
+const norm = s => String(s || "").toLowerCase().replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, w => WORDS[w]).replace(/[–—]/g, "-").replace(/[×]/g, "x").replace(/[^a-z0-9.%+\-x ]+/g, " ").replace(/\s+/g, " ").trim();
 const digits = s => (String(s).match(/\d[\d,]*\.?\d*/g) || []).map(x => x.replace(/,/g, ""));
 
 // A value is verified only if the model's quote really appears in that side's source text
@@ -127,7 +144,7 @@ export function verify(value, quote, sources) {
   const q = norm(quote);
   const want = digits(value);
   if (!q || q.length < 3 || !want.length) return null;
-  const qNums = digits(quote);
+  const qNums = digits(norm(quote));
   if (!want.every(n => qNums.some(x => parseFloat(x) === parseFloat(n)))) return null;
   for (const s of sources) {
     const hay = norm(s.text);

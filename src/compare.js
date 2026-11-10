@@ -122,10 +122,15 @@ async function handle(req, env, ctx) {
     const side = s => ({ name: str(s.name, 80), wiki: str(s.wiki, 120) });
 
     // 2) Fetch ESPN + Wikipedia for both sides
-    const [A, B] = await Promise.all([gather(side(id.a), sport), gather(side(id.b), sport)]);
+    // ESPN data the browser fetched for us (checked and size-limited)
+    const browserEspn = (Array.isArray(body.espn) ? body.espn : []).slice(0, 2)
+      .filter(x => x && typeof x.text === "string" && typeof x.name === "string" && /^https:\/\/www\.espn\.com\//.test(String(x.url)))
+      .map(x => ({ name: str(x.name, 80), url: str(x.url, 200), text: x.text.slice(0, 3500) }));
+    const [A, B] = await Promise.all([gather(side(id.a), sport, browserEspn), gather(side(id.b), sport, browserEspn)]);
     for (const s of [A, B]) if (!s.sources.length)
       return json(200, { error: `Couldn't find stats for ${s.name}. Check the spelling or try their full name.` });
 
+    console.log("sources", JSON.stringify([...A.notes, ...B.notes]));
     // 3) Build the card from those pages only
     const d = parseJSON(await ask(key, BUILD(query, today, sport, A, B), 3000));
     if (!d || !Array.isArray(d.stats) || !d.stats.length)
@@ -158,11 +163,13 @@ async function handle(req, env, ctx) {
       asOf: today,
       verified: true,
       sources: [...A.sources, ...B.sources].map(s => ({ title: s.title, url: s.url, used: used.has(s.url) })),
-      diag: [...A.notes, ...B.notes].slice(0, 8)
+      espnUsed: [...A.sources, ...B.sources].some(s => s.id === "espn")
     };
 
-    const res = json(200, out, { "Cache-Control": `public, max-age=${CACHE_SECONDS}` });
-    if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
+    // Results that used browser-supplied ESPN data are never shared with other visitors
+    const shareable = ![...A.sources, ...B.sources].some(s => s.viaBrowser);
+    const res = json(200, out, { "Cache-Control": shareable ? `public, max-age=${CACHE_SECONDS}` : "no-store" });
+    if (shareable && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
     return res;
   } catch (e) {
     if (e && e.quota) return json(429, { error: "Who's Better has used up its free AI lookups for now. Please try again later." });
