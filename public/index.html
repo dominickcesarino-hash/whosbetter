@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Who's Better? — Settle Any Sports Debate with Verified Stats</title>
-<meta name="description" content="Type “LeBron or Jordan?” and get a side-by-side card with up-to-date, fact-checked stats and a short verdict. Any sport.">
+<meta name="description" content="Type “LeBron or Jordan?” and get a side-by-side card with up-to-date stats from ESPN and Wikipedia, each checked against its source, and a short verdict. Any sport.">
 <meta name="theme-color" content="#07060d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -96,7 +96,7 @@
 <div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 <main>
   <h1>Settle the debate.</h1>
-  <p class="sub">Any two athletes or teams, any sport. Stats are looked up live on Google and fact-checked.</p>
+  <p class="sub">Any two athletes or teams, any sport. Stats come live from ESPN and Wikipedia, and every number is checked against its source.</p>
 
   <form id="f" autocomplete="off">
     <input id="q" maxlength="120" placeholder="LeBron or Jordan?" aria-label="Who do you want to compare?">
@@ -104,13 +104,13 @@
   </form>
   <div class="chips" id="ex"></div>
 
-  <div class="status" id="status" hidden><div class="spin"></div><div id="stxt">Searching Google for the latest stats…</div></div>
+  <div class="status" id="status" hidden><div class="spin"></div><div id="stxt">Finding both players…</div></div>
   <div class="err" id="err" hidden></div>
   <div id="out"></div>
   <div class="recent" id="recent" hidden><div class="rh">Recent</div><div class="chips" id="rlist" style="margin:0"></div></div>
 
-  <p class="disc">Stats come from Google Search via Google's Gemini AI and are double-checked by a second search, but AI can still make mistakes.
-  Numbers with a ✓ were confirmed; ones with a ? couldn't be confirmed. Tap “Sources” to check them yourself.</p>
+  <p class="disc">Stats come from ESPN and Wikipedia. Google's Gemini AI picks the stats and writes the verdict, then every number is checked word for word against the source page.
+  Numbers with a ✓ were found in the source; ones with a ? couldn't be matched. Tap “Sources” to check them yourself.</p>
 </main>
 
 <script src="/common.js"></script>
@@ -141,7 +141,7 @@ async function run(q, fresh){
   if (!q || busy) return;
   $("q").value = q; busy = true; $("go").disabled = true;
   $("err").hidden = true; $("out").innerHTML = ""; $("status").hidden = false;
-  const steps = ["Searching Google for the latest stats…", "Reading official stat sites…", "Fact-checking every number with a second search…", "Almost there…"];
+  const steps = ["Finding both players…", "Reading ESPN career stats and Wikipedia…", "Checking every number against its source…", "Almost there…"];
   let i = 0; $("stxt").textContent = steps[0];
   timer = setInterval(() => { if (i < steps.length - 1) $("stxt").textContent = steps[++i]; }, 6000);
   const u = new URL(location); u.searchParams.set("q", q); history.replaceState(null, "", u);
@@ -171,7 +171,7 @@ function render(d){
     const chk = ok => ok ? `<span class="chk ok" title="Verified">✓</span>` : `<span class="chk no" title="Couldn't be verified">?</span>`;
     return `<div class="row">
       <div class="val va ${win === "a" ? "win" : ""}">${chk(s.a_ok)}${esc(s.a)}</div>
-      <div class="mid"><div class="lab">${esc(s.label)}</div>${s.note ? `<div class="note">${esc(s.note)}</div>` : ""}${bar}</div>
+      <div class="mid"><div class="lab">${esc(s.label)}</div>${s.note || s.source ? `<div class="note">${esc([s.note, s.source].filter(Boolean).join(" · "))}</div>` : ""}${bar}</div>
       <div class="val vb ${win === "b" ? "win" : ""}">${esc(s.b)}${chk(s.b_ok)}</div>
     </div>`;
   }).join("");
@@ -179,9 +179,9 @@ function render(d){
   const total = d.stats.length * 2;
   const okCount = d.stats.reduce((n, s) => n + (s.a_ok ? 1 : 0) + (s.b_ok ? 1 : 0), 0);
   const badge = d.verified && okCount === total
-    ? `<span class="badge ok">✓ All ${total} numbers verified with Google</span>`
+    ? `<span class="badge ok">✓ All ${total} numbers verified against the source</span>`
     : d.verified ? `<span class="badge part">✓ ${okCount} of ${total} numbers verified</span>`
-    : `<span class="badge part">? Fact-check unavailable right now</span>`;
+    : `<span class="badge part">? Some numbers couldn't be checked</span>`;
   const lead = wa === wb ? `Even <b>${wa}–${wb}</b> on stats` :
     `<b>${esc(wa > wb ? d.a.name : d.b.name)}</b> leads <b>${Math.max(wa, wb)}–${Math.min(wa, wb)}</b> on stats`;
   const crown = side => d.winner === side ? `<span class="crown">👑</span>` : "";
@@ -200,9 +200,9 @@ function render(d){
       ${d.corrected ? `<div class="warnline">Heads up: the fact-check corrected some numbers after this verdict was written.</div>` : ""}</div>
     <div class="foot">
       <div class="frow">${badge}<div class="acts"><button class="btn" id="share" type="button">Share</button><button class="btn" id="again" type="button">↻ Refresh</button></div></div>
-      <div class="legend">Stats as of ${esc(d.asOf)}${d.cached ? " (saved result)" : ""}. ✓ = confirmed by a second Google search · ? = couldn't be confirmed.</div>
+      <div class="legend">Stats as of ${esc(d.asOf)}${d.cached ? " (saved result)" : ""}. ✓ = found word for word in the source · ? = couldn't be matched.</div>
       <div class="savenote">${d.savedId ? "✓ Saved to My comparisons" : d.fromSaved ? "Saved comparison" : `<button type="button" id="saveHint">Sign in</button> to save your comparisons.`}</div>
-      ${src ? `<details class="src"><summary>Sources (${d.sources.length})</summary><ul>${src}</ul></details>` : ""}
+      ${src ? `<details class="src" open><summary>Sources (${d.sources.length})</summary><ul>${src}</ul></details>` : ""}
     </div>
   </div>`;
 

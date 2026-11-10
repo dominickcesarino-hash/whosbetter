@@ -1,46 +1,54 @@
 // Who's Better: the AI comparison (answers POST /api/compare, routed from src/worker.js).
 // Set GEMINI_API_KEY in Cloudflare: your Worker > Settings > Variables and Secrets.
-// Gemini looks the stats up on Google Search (grounding), then a second, separate Google-grounded pass fact-checks every number.
-// Only numbers that pass the check are marked "verified" on the page.
+//
+// How it works (all free):
+//  1. Gemini works out who is being compared.
+//  2. We fetch each side's career stats from ESPN and their Wikipedia page.
+//  3. Gemini builds the card using ONLY those pages, quoting the exact text each number came from.
+//  4. A number gets a ✓ only if that quote really appears in the source page (checked by code, not AI).
 // Optional: set COMPARE_MODEL in Cloudflare to choose a different model.
+import { gather, verify } from "./sources.js";
 
-let MODEL = "gemini-flash-latest";    // always points at Google's current Flash model (supports Google Search)
+let MODEL = "gemini-flash-latest";    // always points at Google's current Flash model
 const MAX_QUERY = 120;
 const CACHE_SECONDS = 6 * 60 * 60;     // same matchup within 6 hours reuses the checked result
 
 const json = (status, body, extra = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...extra } });
 
-const RESEARCH = (query, today) => `Today is ${today}. A user typed: "${query}"
+const IDENTIFY = (query, today) => `Today is ${today}. A user of a sports "who's better" site typed: "${query}"
+Work out the two athletes or two teams being compared. It can be any sport.
+Reply with JSON only:
+{"sport": "Basketball", "kind": "athletes", "a": {"name": "LeBron James", "wiki": "LeBron James"}, "b": {"name": "Michael Jordan", "wiki": "Michael Jordan"}}
+"kind" is "athletes" or "teams". "name" is the full, correctly spelled name. "wiki" is the exact English Wikipedia article title.
+If it is not a comparison of two sports people or teams, reply with JSON only: {"error": "short friendly reason"}`;
 
-This is a sports "who's better" comparison. It can be ANY sport (basketball, soccer, American football, baseball, hockey, tennis, golf, F1, boxing, MMA, cricket, athletics, swimming, esports, etc.) and can compare two athletes OR two teams.
+const BUILD = (query, today, sport, A, B) => `Today is ${today}. Build a fair "who's better" comparison for: "${query}" (${sport}).
+Side "a" is ${A.name}. Side "b" is ${B.name}.
 
-Use Google Search to look up CURRENT, up-to-date career stats for both. Prefer official and reference sources (league sites, Basketball-Reference, Pro-Football-Reference, Baseball-Reference, Hockey-Reference, ESPN, Transfermarkt, FBref, ATP/WTA, Formula1.com, BoxRec, ESPNcricinfo, Olympics.com, etc.). If a player is still active, use the latest totals including the current season.
+Use ONLY the source pages below. Do not use your own memory for any number.
+${pages("a", A)}
+${pages("b", B)}
 
-Pick 6 to 8 stats that matter most in THAT sport and that exist for BOTH sides. Always include championships/titles and major awards (e.g. rings and MVPs for the NBA, Ballon d'Ors and league titles for soccer, Grand Slams and weeks at No. 1 for tennis, world titles and race wins for F1). State clearly whether a stat is per game, total, regular season, etc.
+Pick 6 to 8 stats that matter most in ${sport} and that appear in the sources for BOTH sides. Include championships/titles and major awards when the sources list them (e.g. rings and MVPs in the NBA, league titles and Ballon d'Ors in soccer, Grand Slams in tennis, world championships and race wins in F1). Prefer ESPN for career stats (it is the most up to date) and Wikipedia for titles and awards.
+For every value, copy a short exact quote (3 to 12 words) from that side's source that contains the number, e.g. "PTS 26.7" or "4× NBA champion". The quote must appear word for word in the source.
 
-Reply with ONLY a JSON object in a \`\`\`json code block, exactly in this shape:
+Reply with JSON only, in this shape:
 {
-  "sport": "Basketball",
-  "kind": "athletes",
-  "a": {"name": "Full name", "info": "Position · team(s) · years", "active": false},
-  "b": {"name": "Full name", "info": "Position · team(s) · years", "active": true},
+  "a": {"info": "Position · team(s) · years", "active": true},
+  "b": {"info": "Position · team(s) · years", "active": false},
   "stats": [
-    {"label": "Points per game", "note": "Career, regular season", "a": "30.1", "b": "27.0", "better": "higher"}
+    {"label": "Points per game", "note": "Career, regular season", "a": "26.7", "a_quote": "PTS 26.7", "b": "30.1", "b_quote": "PTS 30.1", "better": "higher"}
   ],
   "verdict": "2 to 3 sentences: who is better and why, fair to both, mentioning the deciding numbers.",
   "winner": "a"
 }
-"kind" is "athletes" or "teams". Rules: values are short strings (numbers where possible, e.g. "6", "27.0", "1,124"). "better" is "higher", "lower" (e.g. ERA, goals against) or "none". "winner" is "a", "b" or "even". Never make up a number: if you can't find a stat for both, leave that stat out.
-If this is not a comparison of two sports people or teams, reply with ONLY: {"error": "short friendly reason"}`;
+Values are short strings (e.g. "6", "26.7", "1,124"). "better" is "higher", "lower" (e.g. ERA, goals against) or "none". "winner" is "a", "b" or "even".`;
 
-const VERIFY = (data, today) => `Today is ${today}. You are a strict sports fact-checker. Use Google Search to independently check every number below for ${data.a.name} (side "a") and ${data.b.name} (side "b"). Check against official league or reference sites, using the latest totals for active players.
-
-${JSON.stringify(data.stats.map((s, i) => ({ i, label: s.label, note: s.note, a: s.a, b: s.b })))}
-
-For each stat and each side: "ok" if the number is correct (small rounding differences are fine), "fix" with the correct number if it is wrong, or "unknown" if you could not confirm it from a reliable source.
-Reply with ONLY a JSON object in a \`\`\`json code block:
-{"checks": [{"i": 0, "a": "ok", "a_fix": "", "b": "fix", "b_fix": "27.1", "source": "basketball-reference.com"}]}`;
+function pages(side, s) {
+  if (!s.sources.length) return `\n[${side}] No source pages were found for ${s.name}.`;
+  return s.sources.map(p => `\n===== SOURCE for side "${side}" (${s.name}): ${p.title} =====\n${p.text}`).join("\n");
+}
 
 // Pull the first JSON object out of a model reply
 function parseJSON(text) {
@@ -53,47 +61,29 @@ function parseJSON(text) {
 
 const str = (v, n) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "").trim().slice(0, n);
 
-// Ask Gemini with Google Search turned on. Falls back to other models if one is busy or out of quota.
-async function grounded(key, prompt) {
-  const models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"])];
+// Ask Gemini. Falls back to other models if one is busy or out of free quota.
+async function ask(key, prompt, maxTokens) {
+  const models = [...new Set([MODEL, "gemini-flash-lite-latest", "gemini-flash-latest"])];
   const payload = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+    generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
   });
-  let last = { status: 502, quota: false }; const errs = [];
+  const errs = [];
   for (const m of models) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: payload });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 400));
-      const quota = ((data.error && data.error.details) || []).flatMap(x => x.violations || [])
-        .map(v => `${v.quotaId || v.quotaMetric || ""}${v.quotaValue != null ? "=" + v.quotaValue : ""}`).filter(Boolean).join(", ");
-      errs.push(`${m}: ${r.status} ${quota ? "[" + quota + "] " : ""}${str(data.error && data.error.message, 90)}`);
-      last = { status: r.status, quota: r.status === 429 && !errs.some(e => !/: 429 /.test(e)), msg: errs.join(" | "), model: m };
+      console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 300));
+      errs.push(`${m}: ${r.status} ${str(data.error && data.error.message, 90)}`);
       continue;
     }
     const cand = (data.candidates || [])[0] || {};
-    const text = ((cand.content && cand.content.parts) || []).map(p => p.text || "").join("").trim();
-    const gm = cand.groundingMetadata || {};
-    const sources = (gm.groundingChunks || [])
-      .map(c => c.web).filter(w => w && w.uri)
-      .map(w => ({ title: str(w.title, 80) || "Source", url: w.uri }));
-    const searched = sources.length > 0 || (gm.webSearchQueries || []).length > 0;
-    if (text) return { text, sources, searched };
+    const text = ((cand.content && cand.content.parts) || []).map(p => p.thought ? "" : (p.text || "")).join("").trim();
+    if (text) return text;
+    errs.push(`${m}: empty reply`);
   }
-  // Diagnose: does the key work at all without Google Search?
-  if (errs.some(e => /: 429 /.test(e))) {
-    try {
-      const t = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`, {
-        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Say OK" }] }], generationConfig: { maxOutputTokens: 5 } })
-      });
-      last.msg += ` || without Google Search: ${t.status}${t.ok ? " (works)" : ""}`;
-    } catch {}
-  }
-  throw last;
+  throw { quota: errs.length && errs.every(e => /: 429 /.test(e)), msg: errs.join(" | ") };
 }
 
 async function handle(req, env, ctx) {
@@ -106,9 +96,9 @@ async function handle(req, env, ctx) {
   const query = str(body.q, MAX_QUERY).replace(/\s+/g, " ");
   if (query.length < 3) return json(400, { error: "Type two names, like \"LeBron or Jordan?\"" });
 
-  // Cache by the normalized question (works on custom domains; harmless elsewhere)
+  // Cache by the normalized question (same matchup within 6 hours reuses the checked result)
   const norm = query.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-  const cacheKey = new Request("https://whosbetter.cache/" + encodeURIComponent(norm));
+  const cacheKey = new Request("https://whosbetter.cache/v2/" + encodeURIComponent(norm));
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache && body.fresh !== true) {
     const hit = await cache.match(cacheKey).catch(() => null);
@@ -118,76 +108,62 @@ async function handle(req, env, ctx) {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "America/New_York" });
 
   try {
-    // 1) Research with Google Search
-    const r1 = await grounded(key, RESEARCH(query, today));
-    const d = parseJSON(r1.text);
-    if (!d) return json(502, { error: "Couldn't read the stats this time. Please try again." });
-    if (d.error) return json(200, { error: str(d.error, 200) });
-    if (!d.a || !d.b || !Array.isArray(d.stats) || !d.stats.length)
-      return json(502, { error: "Couldn't find stats for both sides. Try full names, like \"LeBron James or Michael Jordan\"." });
+    // 1) Who is being compared?
+    const id = parseJSON(await ask(key, IDENTIFY(query, today), 400));
+    if (!id) return json(502, { error: "Couldn't understand that one. Try two full names, like \"LeBron James or Michael Jordan\"." });
+    if (id.error) return json(200, { error: str(id.error, 200) });
+    if (!id.a || !id.b || !id.a.name || !id.b.name) return json(200, { error: "Type two names, like \"LeBron or Jordan?\"" });
+    const sport = str(id.sport, 40) || "Sports";
+    const side = s => ({ name: str(s.name, 80), wiki: str(s.wiki, 120) });
+
+    // 2) Fetch ESPN + Wikipedia for both sides
+    const [A, B] = await Promise.all([gather(side(id.a), sport), gather(side(id.b), sport)]);
+    for (const s of [A, B]) if (!s.sources.length)
+      return json(200, { error: `Couldn't find stats for ${s.name}. Check the spelling or try their full name.` });
+
+    // 3) Build the card from those pages only
+    const d = parseJSON(await ask(key, BUILD(query, today, sport, A, B), 3000));
+    if (!d || !Array.isArray(d.stats) || !d.stats.length)
+      return json(502, { error: "Couldn't put the stats together this time. Please try again." });
+
+    // 4) Check every number against its quote in the real source page
+    const used = new Map();
+    const stats = d.stats.slice(0, 10).map(s => {
+      const out = { label: str(s.label, 40), note: str(s.note, 60), a: str(s.a, 24), b: str(s.b, 24),
+        better: ["higher", "lower", "none"].includes(s.better) ? s.better : "higher", a_ok: false, b_ok: false, source: "" };
+      const va = verify(out.a, s.a_quote, A.sources), vb = verify(out.b, s.b_quote, B.sources);
+      if (va) { out.a_ok = true; used.set(va.url, va); }
+      if (vb) { out.b_ok = true; used.set(vb.url, vb); }
+      out.source = [va, vb].filter(Boolean).map(v => v.id === "espn" ? "ESPN" : "Wikipedia").filter((x, i, a) => a.indexOf(x) === i).join(" & ");
+      return out;
+    }).filter(s => s.label && s.a && s.b && (s.a_ok || s.b_ok)); // drop stats that couldn't be checked at all
+
+    if (stats.length < 2)
+      return json(200, { error: "Couldn't find enough verified stats for both sides. Try full names, like \"LeBron James or Michael Jordan\"." });
 
     const out = {
       query,
-      sport: str(d.sport, 40),
-      kind: d.kind === "teams" ? "teams" : "athletes",
-      a: { name: str(d.a.name, 60), info: str(d.a.info, 120), active: !!d.a.active },
-      b: { name: str(d.b.name, 60), info: str(d.b.info, 120), active: !!d.b.active },
-      stats: d.stats.slice(0, 10).map(s => ({
-        label: str(s.label, 40), note: str(s.note, 60),
-        a: str(s.a, 24), b: str(s.b, 24),
-        better: ["higher", "lower", "none"].includes(s.better) ? s.better : "higher",
-        a_ok: false, b_ok: false, fixed: false, source: ""
-      })).filter(s => s.label && s.a && s.b),
+      sport,
+      kind: id.kind === "teams" ? "teams" : "athletes",
+      a: { name: A.name, info: str(d.a && d.a.info, 120), active: !!(d.a && d.a.active) },
+      b: { name: B.name, info: str(d.b && d.b.info, 120), active: !!(d.b && d.b.active) },
+      stats,
       verdict: str(d.verdict, 600),
       winner: ["a", "b", "even"].includes(d.winner) ? d.winner : "even",
       asOf: today,
-      searched: r1.searched,
-      verified: false,
-      sources: r1.sources
+      verified: true,
+      sources: [...A.sources, ...B.sources].map(s => ({ title: s.title, url: s.url, used: used.has(s.url) }))
     };
 
-    // 2) Independent fact-check with Google Search. A number is only marked verified
-    //    if the research step actually used Google AND the fact-checker confirmed (or corrected) it.
-    try {
-      const r2 = await grounded(key, VERIFY(out, today));
-      const v = parseJSON(r2.text);
-      if (r2.searched && v && Array.isArray(v.checks)) {
-        for (const c of v.checks) {
-          const s = out.stats[c && c.i];
-          if (!s) continue;
-          for (const side of ["a", "b"]) {
-            const fix = str(c[side + "_fix"], 24);
-            if (c[side] === "ok") s[side + "_ok"] = true;
-            else if (c[side] === "fix" && fix) { s[side] = fix; s[side + "_ok"] = true; s.fixed = true; }
-          }
-          s.source = str(c.source, 80);
-        }
-        out.verified = true;
-        out.sources = dedupe([...out.sources, ...r2.sources]);
-      }
-    } catch (e) { console.error("verify step failed", e && e.status); }
-
-    if (!out.searched) out.stats.forEach(s => { s.a_ok = s.b_ok = false; });
-    // If a correction flipped the numbers, the verdict may be stale; flag it for the page.
-    out.corrected = out.stats.some(s => s.fixed);
-
     const res = json(200, out, { "Cache-Control": `public, max-age=${CACHE_SECONDS}` });
-    if (cache && out.verified && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
+    if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
     return res;
   } catch (e) {
-    if (e && e.quota) return json(429, { error: "Who's Better has used up its free lookups for now. Please try again later." });
+    if (e && e.quota) return json(429, { error: "Who's Better has used up its free AI lookups for now. Please try again later." });
     console.error(e);
-    const detail = e && e.msg ? `Gemini: ${e.msg}` : String(e && e.message || e).slice(0, 200);
-    if (e && /api key/i.test(e.msg || "")) return json(500, { error: "The Gemini API key isn't valid. Check GEMINI_API_KEY in Cloudflare.", detail });
-    return json(502, { error: "Couldn't reach the stats service. Please try again.", detail });
+    return json(502, { error: "Couldn't reach the stats service. Please try again.", detail: e && e.msg ? `Gemini: ${e.msg}` : String(e && e.message || e).slice(0, 200) });
   }
 }
 
-function dedupe(list) {
-  const seen = new Set();
-  return list.filter(s => { const k = s.title + "|" + s.url; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 12);
-}
-
-// Cloudflare Pages Functions: this file answers requests to /api/compare
+// Called from src/worker.js for POST /api/compare
 export const onRequestPost = (context) => handle(context.request, context.env, context);
-export const onRequestGet = () => json(405, { error: "Method not allowed" });

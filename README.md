@@ -20,12 +20,13 @@ In Firebase (Authentication > Settings > Authorized domains), add this site's do
 Shows comparisons sent, accounts made, most looked-up sports, athletes and teams, most viewed leagues, page views and the latest comparisons.
 Only accounts whose verified email matches the `ADMIN_EMAIL` secret (set in Cloudflare) can see it.
 
-## Verified, up-to-date stats
+## Verified, up-to-date stats (free)
 
-Gemini looks the stats up with Google Search, then a second, separate Google search fact-checks every number:
-- ✓ = confirmed
-- corrected numbers are swapped in automatically
-- ? = couldn't be confirmed
+For each comparison:
+1. Gemini works out who is being compared.
+2. The site fetches each side's career stats from ESPN and their Wikipedia page (cached for a few hours).
+3. Gemini builds the card using only those pages, quoting the exact text each number came from.
+4. Code (not AI) checks that every quote really appears in the source page and contains the same number. Matches get a ✓, anything else gets a ?, and stats that can't be checked on either side are left out.
 
 Sources are listed under each card so anyone can double-check.
 
@@ -36,5 +37,5 @@ Sources are listed under each card so anyone can double-check.
 3. In the Worker, go to Settings > Variables and Secrets and add two **Secrets**: `GEMINI_API_KEY` (your key) and `ADMIN_EMAIL` (the email you sign in with).
 4. Your site is at whosbetter.<your-subdomain>.workers.dev.
 
-Each comparison uses 2 Google-grounded Gemini requests (the free tier has a daily limit). Results are cached for 6 hours on a custom domain.
+Each comparison uses 2 regular Gemini requests (no Google Search needed, so it works on the free tier). Results are cached for 6 hours on a custom domain.
 Optional: set `COMPARE_MODEL` to choose a different model (default `gemini-2.5-flash`).
