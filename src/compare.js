@@ -83,6 +83,16 @@ async function grounded(key, prompt) {
     const searched = sources.length > 0 || (gm.webSearchQueries || []).length > 0;
     if (text) return { text, sources, searched };
   }
+  // Diagnose: does the key work at all without Google Search?
+  if (last.status === 429) {
+    try {
+      const t = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Say OK" }] }], generationConfig: { maxOutputTokens: 5 } })
+      });
+      last.msg += ` || without Google Search: ${t.status}${t.ok ? " (works)" : ""}`;
+    } catch {}
+  }
   throw last;
 }
 
