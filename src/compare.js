@@ -68,7 +68,9 @@ async function grounded(key, prompt) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       console.error("Gemini error", m, r.status, JSON.stringify(data).slice(0, 400));
-      errs.push(`${m}: ${r.status} ${str(data.error && data.error.message, 160)}`);
+      const quota = ((data.error && data.error.details) || []).flatMap(x => x.violations || [])
+        .map(v => `${v.quotaId || v.quotaMetric || ""}${v.quotaValue != null ? "=" + v.quotaValue : ""}`).filter(Boolean).join(", ");
+      errs.push(`${m}: ${r.status} ${quota ? "[" + quota + "] " : ""}${str(data.error && data.error.message, 90)}`);
       last = { status: r.status, quota: r.status === 429 && !errs.some(e => !/: 429 /.test(e)), msg: errs.join(" | "), model: m };
       continue;
     }
